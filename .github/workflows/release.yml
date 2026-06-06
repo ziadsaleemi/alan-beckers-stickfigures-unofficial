@@ -22,11 +22,78 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag_name }}"
+          fi
+          version="${tag#v}"
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            version="1.0.0"
+          fi
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Import Developer ID certificate
+        shell: bash
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MACOS_CERTIFICATE_P12:-}" ] || [ -z "${MACOS_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "Missing MACOS_CERTIFICATE_P12 or MACOS_CERTIFICATE_PASSWORD secrets." >&2
+            echo "Export a Developer ID Application certificate as a .p12 file and add it to GitHub Secrets before tagging a macOS release." >&2
+            exit 1
+          fi
+
+          keychain_password="${MACOS_KEYCHAIN_PASSWORD:-temporary-release-keychain-password}"
+          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
+          certificate_path="$RUNNER_TEMP/developer-id.p12"
+
+          printf '%s' "$MACOS_CERTIFICATE_P12" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path"
+
+      - name: Prepare App Store Connect API key
+        shell: bash
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${MACOS_NOTARY_KEY:-}" ]; then
+            key_path="$RUNNER_TEMP/AuthKey_${MACOS_NOTARY_KEY_ID}.p8"
+            printf '%s' "$MACOS_NOTARY_KEY" > "$key_path"
+            chmod 600 "$key_path"
+            echo "MACOS_NOTARY_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          fi
+
       - name: Build DMG
+        env:
+          MACOS_REQUIRE_NOTARIZATION: "1"
+          MACOS_NOTARIZE: "1"
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: ./script/package_macos.sh
 
       - name: Inspect DMG
-        run: hdiutil imageinfo dist/Alan-Beckers-Stickfigures-macOS.dmg
+        run: |
+          hdiutil imageinfo dist/Alan-Beckers-Stickfigures-macOS.dmg
+          spctl -a -t open --context context:primary-signature -v dist/Alan-Beckers-Stickfigures-macOS.dmg
 
       - name: Upload macOS DMG artifact
         uses: actions/upload-artifact@v4

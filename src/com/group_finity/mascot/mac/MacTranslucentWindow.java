@@ -10,6 +10,8 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
+import java.awt.Shape;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.lang.reflect.InvocationTargetException;
@@ -17,7 +19,8 @@ import java.lang.reflect.InvocationTargetException;
 final class MacTranslucentWindow extends JWindow implements TranslucentWindow {
     private static final long serialVersionUID = 1L;
 
-    private MacNativeImage image;
+    private volatile MacNativeImage image;
+    private boolean dispatchReady;
 
     MacTranslucentWindow() {
         super();
@@ -29,6 +32,7 @@ final class MacTranslucentWindow extends JWindow implements TranslucentWindow {
         getLayeredPane().setOpaque(false);
         getContentPane().setBackground(new Color(0, 0, 0, 0));
         setBackground(new Color(0, 0, 0, 0));
+        dispatchReady = true;
     }
 
     @Override
@@ -59,12 +63,24 @@ final class MacTranslucentWindow extends JWindow implements TranslucentWindow {
 
     @Override
     public void setVisible(final boolean visible) {
-        super.setVisible(visible);
-        if (visible) {
-            setAlwaysOnTop(true);
-            toFront();
-            updateImage();
-        }
+        runOnEventThread(() -> {
+            MacTranslucentWindow.super.setVisible(visible);
+            if (visible) {
+                setAlwaysOnTop(true);
+                toFront();
+                paintCurrentImage();
+            }
+        });
+    }
+
+    @Override
+    public void setBounds(final int x, final int y, final int width, final int height) {
+        runOnEventThread(() -> MacTranslucentWindow.super.setBounds(x, y, width, height));
+    }
+
+    @Override
+    public void setBounds(final Rectangle rectangle) {
+        setBounds(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
     }
 
     @Override
@@ -88,37 +104,70 @@ final class MacTranslucentWindow extends JWindow implements TranslucentWindow {
             return;
         }
 
-        final Runnable paintTask = () -> {
-            setShape(currentImage.getAlphaMask());
-            if (isShowing()) {
-                toFront();
-            }
+        runOnEventThread(this::paintCurrentImage);
+    }
 
-            final Graphics graphics = getGraphics();
-            if (graphics != null) {
+    private void paintCurrentImage() {
+        final MacNativeImage currentImage = getImage();
+        if (currentImage == null || getWidth() <= 0 || getHeight() <= 0) {
+            return;
+        }
+
+        final Shape currentMask = currentImage.getAlphaMask();
+
+        if (isDisplayable()) {
+            // Clear the previous frame before narrowing the native window shape.
+            setShape(null);
+            final Graphics clearGraphics = getGraphics();
+            if (clearGraphics != null) {
                 try {
-                    paint(graphics);
+                    clear(clearGraphics);
                 } finally {
-                    graphics.dispose();
+                    clearGraphics.dispose();
                 }
             }
+        }
 
-            repaint(0, 0, getWidth(), getHeight());
-            Toolkit.getDefaultToolkit().sync();
-        };
+        setShape(currentMask);
+        if (isShowing()) {
+            toFront();
+        }
 
-        if (SwingUtilities.isEventDispatchThread()) {
-            paintTask.run();
+        final Graphics graphics = getGraphics();
+        if (graphics != null) {
+            try {
+                paint(graphics);
+            } finally {
+                graphics.dispose();
+            }
+        }
+
+        Toolkit.getDefaultToolkit().sync();
+    }
+
+    private void clear(final Graphics graphics) {
+        final Graphics2D graphics2D = (Graphics2D) graphics.create();
+        try {
+            graphics2D.setComposite(AlphaComposite.Clear);
+            graphics2D.fillRect(0, 0, getWidth(), getHeight());
+        } finally {
+            graphics2D.dispose();
+        }
+    }
+
+    private void runOnEventThread(final Runnable task) {
+        if (!dispatchReady || SwingUtilities.isEventDispatchThread() || Thread.holdsLock(getTreeLock())) {
+            task.run();
             return;
         }
 
         try {
-            SwingUtilities.invokeAndWait(paintTask);
+            SwingUtilities.invokeAndWait(task);
         } catch (final InterruptedException exception) {
             Thread.currentThread().interrupt();
-            SwingUtilities.invokeLater(paintTask);
+            SwingUtilities.invokeLater(task);
         } catch (final InvocationTargetException exception) {
-            SwingUtilities.invokeLater(paintTask);
+            SwingUtilities.invokeLater(task);
         }
     }
 }

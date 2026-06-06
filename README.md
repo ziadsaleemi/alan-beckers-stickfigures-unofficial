@@ -43,7 +43,7 @@ Download the installer from the latest release: [**alan-beckers-stickfigures-ins
 4. Open the app. It shows a settings/status window and adds an `ABS` item to the macOS menu bar.
 5. Use the menu bar item to turn the stickfigures on or off, restart them, open logs, or quit the wrapper.
 6. In Settings, check only the stickfigure colors you want enabled. Disabled stickfigures are hidden the next time the Java app starts.
-7. If macOS blocks the unsigned launcher, Control-click the app, choose **Open**, then confirm.
+7. Public release builds are signed and notarized so macOS can verify them. Local development builds are ad-hoc signed and may require Control-click, **Open**, then confirm.
 
 macOS launcher output is written to `~/Library/Logs/AlanBeckersStickfigures.log`.
 
@@ -75,6 +75,20 @@ Build the distributable DMG:
 The DMG is written to `dist/Alan-Beckers-Stickfigures-macOS.dmg`. The app is ad-hoc signed for local validation, but not notarized.
 The local `dist/` directory is ignored by Git.
 
+For a public macOS release that opens normally on other Macs, build with a Developer ID Application certificate and notarization credentials:
+
+```bash
+MACOS_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+MACOS_REQUIRE_NOTARIZATION=1 \
+MACOS_NOTARIZE=1 \
+MACOS_NOTARY_KEY_ID="KEYID" \
+MACOS_NOTARY_ISSUER_ID="ISSUER-UUID" \
+MACOS_NOTARY_KEY_PATH="/path/to/AuthKey_KEYID.p8" \
+./script/package_macos.sh
+```
+
+Use a Team API key from App Store Connect for `notarytool`; individual keys do not work for release notarization. Apple ID notarization also works by replacing the API key variables with `MACOS_NOTARY_APPLE_ID`, `MACOS_NOTARY_TEAM_ID`, and `MACOS_NOTARY_PASSWORD` using an app-specific password.
+
 ### Windows Development Build
 
 Build the Windows installer on Windows with JDK 17+ and WiX Toolset installed:
@@ -93,6 +107,33 @@ The installer is written to `dist/Alan-Beckers-Stickfigures-Windows.exe`.
 - `Alan-Beckers-Stickfigures-Windows.exe`
 - `Alan-Beckers-Stickfigures-source-<tag>.zip`
 - GitHub's standard Source code archives for the tag
+
+macOS release builds require these GitHub Actions secrets before tagging:
+
+- `MACOS_CERTIFICATE_P12`: base64 of the exported Developer ID Application `.p12`
+- `MACOS_CERTIFICATE_PASSWORD`: password for that `.p12`
+- `MACOS_CODESIGN_IDENTITY`: full signing identity, for example `Developer ID Application: Your Name (TEAMID)`
+- `MACOS_KEYCHAIN_PASSWORD`: optional temporary CI keychain password
+- Team API-key notarization: `MACOS_NOTARY_KEY`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`
+- Or Apple ID notarization: `MACOS_NOTARY_APPLE_ID`, `MACOS_NOTARY_TEAM_ID`, `MACOS_NOTARY_PASSWORD`
+
+To add the certificate and API-key secrets from macOS:
+
+```bash
+base64 -i /path/to/DeveloperIDApplication.p12 | gh secret set MACOS_CERTIFICATE_P12
+gh secret set MACOS_CERTIFICATE_PASSWORD
+gh secret set MACOS_CODESIGN_IDENTITY
+gh secret set MACOS_NOTARY_KEY < /path/to/AuthKey_KEYID.p8
+gh secret set MACOS_NOTARY_KEY_ID
+gh secret set MACOS_NOTARY_ISSUER_ID
+```
+
+After those secrets exist, create the next release by pushing a tag:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
 
 ## Future Plans (Ordered in Priority)
 

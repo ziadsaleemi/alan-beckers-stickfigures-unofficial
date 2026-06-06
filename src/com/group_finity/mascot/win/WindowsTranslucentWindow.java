@@ -15,13 +15,35 @@ import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Graphics;
+import java.awt.Rectangle;
 import java.lang.reflect.InvocationTargetException;
 
 class WindowsTranslucentWindow extends JWindow implements TranslucentWindow {
     private static final long serialVersionUID = 1L;
 
-    private WindowsNativeImage image;
+    private volatile WindowsNativeImage image;
     private int alpha = 255;
+    private boolean dispatchReady;
+
+    WindowsTranslucentWindow() {
+        super();
+        dispatchReady = true;
+    }
+
+    @Override
+    public void setVisible(final boolean visible) {
+        runOnEventThread(() -> WindowsTranslucentWindow.super.setVisible(visible));
+    }
+
+    @Override
+    public void setBounds(final int x, final int y, final int width, final int height) {
+        runOnEventThread(() -> WindowsTranslucentWindow.super.setBounds(x, y, width, height));
+    }
+
+    @Override
+    public void setBounds(final Rectangle rectangle) {
+        setBounds(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+    }
 
     @Override
     public Component asComponent() {
@@ -134,13 +156,22 @@ class WindowsTranslucentWindow extends JWindow implements TranslucentWindow {
             return;
         }
 
+        runOnEventThread(paintTask);
+    }
+
+    private void runOnEventThread(final Runnable task) {
+        if (!dispatchReady || SwingUtilities.isEventDispatchThread() || Thread.holdsLock(getTreeLock())) {
+            task.run();
+            return;
+        }
+
         try {
-            SwingUtilities.invokeAndWait(paintTask);
+            SwingUtilities.invokeAndWait(task);
         } catch (final InterruptedException exception) {
             Thread.currentThread().interrupt();
-            SwingUtilities.invokeLater(paintTask);
+            SwingUtilities.invokeLater(task);
         } catch (final InvocationTargetException exception) {
-            SwingUtilities.invokeLater(paintTask);
+            SwingUtilities.invokeLater(task);
         }
     }
 }

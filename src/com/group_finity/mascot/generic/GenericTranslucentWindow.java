@@ -21,9 +21,10 @@ import javax.swing.SwingUtilities;
 class GenericTranslucentWindow extends JWindow implements TranslucentWindow {
     private static final long serialVersionUID = 1L;
 
-    private GenericNativeImage image;
+    private volatile GenericNativeImage image;
     private JPanel panel;
     private float alpha = 1.0f;
+    private boolean dispatchReady;
 
     GenericTranslucentWindow() {
         super(WindowUtils.getAlphaCompatibleGraphicsConfiguration());
@@ -53,6 +54,7 @@ class GenericTranslucentWindow extends JWindow implements TranslucentWindow {
         setContentPane(panel);
         getRootPane().setOpaque(false);
         getLayeredPane().setOpaque(false);
+        dispatchReady = true;
     }
 
     private void init() {
@@ -86,6 +88,10 @@ class GenericTranslucentWindow extends JWindow implements TranslucentWindow {
 
     @Override
     public void setBounds(final int x, final int y, final int width, final int height) {
+        runOnEventThread(() -> setBoundsOnEventThread(x, y, width, height));
+    }
+
+    private void setBoundsOnEventThread(final int x, final int y, final int width, final int height) {
         final Rectangle oldBounds = getBounds();
         final boolean sizeChanged = oldBounds.width != width || oldBounds.height != height;
 
@@ -97,7 +103,16 @@ class GenericTranslucentWindow extends JWindow implements TranslucentWindow {
     }
 
     @Override
+    public void setBounds(final Rectangle rectangle) {
+        setBounds(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+    }
+
+    @Override
     public void setVisible(final boolean visible) {
+        runOnEventThread(() -> setVisibleOnEventThread(visible));
+    }
+
+    private void setVisibleOnEventThread(final boolean visible) {
         if (visible) {
             WindowUtils.setWindowTransparent(this, true);
         }
@@ -173,17 +188,26 @@ class GenericTranslucentWindow extends JWindow implements TranslucentWindow {
             return;
         }
 
-        try {
-            SwingUtilities.invokeAndWait(repaintTask);
-        } catch (final InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            SwingUtilities.invokeLater(repaintTask);
-        } catch (final InvocationTargetException exception) {
-            SwingUtilities.invokeLater(repaintTask);
-        }
+        runOnEventThread(repaintTask);
     }
 
     private void clearNativeMask() {
         WindowUtils.setWindowMask(this, new java.awt.geom.Area());
+    }
+
+    private void runOnEventThread(final Runnable task) {
+        if (!dispatchReady || SwingUtilities.isEventDispatchThread() || Thread.holdsLock(getTreeLock())) {
+            task.run();
+            return;
+        }
+
+        try {
+            SwingUtilities.invokeAndWait(task);
+        } catch (final InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            SwingUtilities.invokeLater(task);
+        } catch (final InvocationTargetException exception) {
+            SwingUtilities.invokeLater(task);
+        }
     }
 }

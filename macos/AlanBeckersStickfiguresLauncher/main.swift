@@ -302,12 +302,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             process.executableURL = URL(fileURLWithPath: javaPath)
             process.arguments = [
                 "-Dshimeji.macWindowBoundsFile=\(windowBoundsURL.path)",
+                "-Djava.util.logging.config.file=\(runtimeJavaURL.appendingPathComponent("conf/logging.properties").path)",
                 "-jar",
                 runtimeJarURL.lastPathComponent
             ]
             process.currentDirectoryURL = runtimeJavaURL
 
             let logHandle = try openLogFileHandle()
+            writeLogLine("Starting stickfigures.", to: logHandle)
+            writeLogLine("Java: \(javaPath)", to: logHandle)
+            writeLogLine("Runtime: \(runtimeJavaURL.path)", to: logHandle)
+            writeLogLine("Enabled sets: \(selectedImageSetNames().joined(separator: "/"))", to: logHandle)
             process.standardOutput = logHandle
             process.standardError = logHandle
             logFileHandle = logHandle
@@ -322,6 +327,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             try process.run()
             javaProcess = process
         } catch {
+            appendLogLine("Failed to start stickfigures: \(error.localizedDescription)")
             if showErrors {
                 presentError("Could not start the stickfigures: \(error.localizedDescription)")
             }
@@ -787,6 +793,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
 
         if process.isRunning {
+            appendLogLine(force ? "Stopping stickfigures immediately." : "Stopping stickfigures.")
             process.terminate()
             let processID = process.processIdentifier
 
@@ -812,6 +819,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             javaProcess = nil
         }
 
+        if let logFileHandle {
+            writeLogLine("Stickfigures exited with status \(process.terminationStatus).", to: logFileHandle)
+        }
         try? logFileHandle?.close()
         logFileHandle = nil
         updateStatus()
@@ -915,8 +925,34 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return handle
     }
 
+    private func writeLogLine(_ message: String, to handle: FileHandle) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
+            return
+        }
+
+        handle.write(data)
+        try? handle.synchronize()
+    }
+
+    private func appendLogLine(_ message: String) {
+        guard let handle = try? openLogFileHandle() else {
+            return
+        }
+
+        writeLogLine(message, to: handle)
+        try? handle.close()
+    }
+
+    private func ensureLogHasVisibleContent() {
+        let size = (try? logURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if size == 0 {
+            appendLogLine("Log opened. Status: \(isRunning ? "on" : "off"). Java output and wrapper events appear here.")
+        }
+    }
+
     @objc private func openLog() {
-        _ = try? openLogFileHandle().close()
+        ensureLogHasVisibleContent()
         NSWorkspace.shared.open(logURL)
     }
 

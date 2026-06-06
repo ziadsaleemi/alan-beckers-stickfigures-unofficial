@@ -27,33 +27,33 @@
 
 		<Action Name="Dash" Type="Move" BorderType="Floor">
 			<Animation>
-				<Pose Image="/run01.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run02.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run03.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run04.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run05.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run06.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run07.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run08.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run09.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run10.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run11.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
+				<Pose Image="/run01.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run02.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run03.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run04.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run05.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run06.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run07.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run08.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run09.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run10.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run11.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
 			</Animation>
 		</Action>
 
 		<Action Name="Run" Type="Move" BorderType="Floor">
 			<Animation>
-				<Pose Image="/run01.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run02.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run03.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run04.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run05.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run06.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run07.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run08.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run09.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run10.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run11.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
+				<Pose Image="/run01.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run02.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run03.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run04.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run05.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run06.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run07.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run08.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run09.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run10.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run11.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
 			</Animation>
 		</Action>
 
@@ -124,10 +124,10 @@
 				<Pose Image="/swing02.png" ImageAnchor="64,0" Velocity="-4,0" Duration="2" />
 				<Pose Image="/swing03.png" ImageAnchor="64,0" Velocity="-4,0" Duration="2" />
 				<Pose Image="/swing04.png" ImageAnchor="64,0" Velocity="-4,0" Duration="2" />
-				<Pose Image="/swing05.png" ImageAnchor="64,2" Velocity="-8,0" Duration="2" />
-				<Pose Image="/swing06.png" ImageAnchor="64,4" Velocity="-12,0" Duration="2" />
-				<Pose Image="/swing07.png" ImageAnchor="64,8" Velocity="-10,0" Duration="2" />
-				<Pose Image="/swing08.png" ImageAnchor="64,6" Velocity="-8,0" Duration="2" />
+				<Pose Image="/swing05.png" ImageAnchor="64,2" Velocity="-6,0" Duration="2" />
+				<Pose Image="/swing06.png" ImageAnchor="64,4" Velocity="-6,0" Duration="2" />
+				<Pose Image="/swing07.png" ImageAnchor="64,8" Velocity="-6,0" Duration="2" />
+				<Pose Image="/swing08.png" ImageAnchor="64,6" Velocity="-6,0" Duration="2" />
 			</Animation>
 		</Action>
 
@@ -177,7 +177,7 @@
 
 		<Action Name="Tripping" Type="Animate" BorderType="Floor">
 			<Animation>
-				<Pose Image="/trip01.png" ImageAnchor="64,128" Velocity="-10,0" Duration="2" />
+				<Pose Image="/trip01.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
 				<Pose Image="/trip02.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
 				<Pose Image="/trip03.png" ImageAnchor="64,128" Velocity="-4,0" Duration="2" />
 				<Pose Image="/trip04.png" ImageAnchor="64,128" Velocity="-2,0" Duration="4" />
@@ -388,17 +388,17 @@
 
 		<Action Name="RunAffordance" Type="Embedded" Class="com.group_finity.mascot.action.ScanMove" Affordance="Hug" Behavior="HuggingSolid" TargetBehavior="HuggedSolid" BorderType="Floor">
 			<Animation>
-				<Pose Image="/run01.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run02.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run03.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run04.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run05.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run06.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run07.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run08.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run09.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run10.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
-				<Pose Image="/run11.png" ImageAnchor="64,128" Velocity="-18,0" Duration="2" />
+				<Pose Image="/run01.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run02.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run03.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run04.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run05.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run06.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run07.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run08.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run09.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run10.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
+				<Pose Image="/run11.png" ImageAnchor="64,128" Velocity="-6,0" Duration="2" />
 			</Animation>
 		</Action>
 		<!-- - - Solid head -->
@@ -508,7 +508,7 @@
 		</Action>
 
 		<Action Name="HoldOntoWall" Type="Sequence" Loop="false">
-			<ActionReference Name="GrabWall" Duration="${500+Math.random()*1000}" />
+			<ActionReference Name="GrabWall" Duration="${60+Math.random()*100}" />
 		</Action>
 
 		<Action Name="FallFromWall" Type="Sequence" Loop="false">
@@ -517,7 +517,7 @@
 		</Action>
 
 		<Action Name="HoldOntoCeiling" Type="Sequence" Loop="false">
-			<ActionReference Name="GrabCeiling" Duration="${500+Math.random()*1000}" />
+			<ActionReference Name="GrabCeiling" Duration="${60+Math.random()*100}" />
 		</Action>
 
 		<Action Name="FallFromCeiling" Type="Sequence" Loop="false">
@@ -526,11 +526,11 @@
 		</Action>
 
 		<Action Name="WalkAlongWorkAreaFloor" Type="Sequence" Loop="false">
-			<ActionReference Name="Walk" TargetX="${mascot.environment.workArea.left+64+Math.random()*(mascot.environment.workArea.width-128)}" />
+			<ActionReference Name="Walk" TargetX="${mascot.environment.workArea.left+64+Math.random()*Math.max(1,mascot.environment.workArea.width-128)}" />
 		</Action>
 
 		<Action Name="RunAlongWorkAreaFloor" Type="Sequence" Loop="false">
-			<ActionReference Name="Run" TargetX="${mascot.environment.workArea.left+64+Math.random()*(mascot.environment.workArea.width-128)}" />
+			<ActionReference Name="Run" TargetX="${mascot.environment.workArea.left+64+Math.random()*Math.max(1,mascot.environment.workArea.width-128)}" />
 		</Action>
 
 		<Action Name="WalkLeftAlongFloorAndSit" Type="Sequence" Loop="false">
@@ -586,74 +586,74 @@
 		</Action>
 
 		<Action Name="ClimbHalfwayAlongWall" Type="Sequence" Loop="false">
-			<ActionReference Name="ClimbWall" TargetY="${mascot.environment.workArea.top+64 + Math.random()*(mascot.environment.workArea.height-128)}" />
+			<ActionReference Name="ClimbWall" TargetY="${mascot.environment.workArea.top+64 + Math.random()*Math.max(1,mascot.environment.workArea.height-128)}" />
 		</Action>
 
 		<Action Name="ClimbAlongWall" Type="Sequence" Loop="false">
 			<ActionReference Name="ClimbWall" TargetY="#{mascot.environment.workArea.top+64}" />
 			<ActionReference Name="Offset" Y="-64" />
 			<ActionReference Name="Look" />
-			<ActionReference Name="ClimbCeiling" TargetX="${mascot.lookRight ? mascot.environment.workArea.left+Math.random()*100 : mascot.environment.workArea.right-Math.random*100}" />
+			<ActionReference Name="ClimbCeiling" TargetX="${mascot.lookRight ? mascot.environment.workArea.left+Math.random()*100 : mascot.environment.workArea.right-Math.random()*100}" />
 		</Action>
 
 		<Action Name="ClimbAlongCeiling" Type="Sequence" Loop="false">
-			<ActionReference Name="ClimbCeiling" TargetX="${mascot.environment.workArea.left+64+Math.random()*(mascot.environment.workArea.width-128)}" />
+			<ActionReference Name="ClimbCeiling" TargetX="${mascot.environment.workArea.left+64+Math.random()*Math.max(1,mascot.environment.workArea.width-128)}" />
 		</Action>
 
 		<Action Name="WalkAlongIECeiling" Type="Sequence" Loop="false">
-			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.left+64+Math.random()*(mascot.environment.activeIE.width-128)}" />
+			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.left+Math.min(Math.max(1,mascot.environment.activeIE.width-1),64+Math.random()*Math.max(1,mascot.environment.activeIE.width-128))}" />
 		</Action>
 
 		<Action Name="RunAlongIECeiling" Type="Sequence" Loop="false">
-			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.left+64+Math.random()*(mascot.environment.activeIE.width-128)}" />
+			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.left+Math.min(Math.max(1,mascot.environment.activeIE.width-1),64+Math.random()*Math.max(1,mascot.environment.activeIE.width-128))}" />
 		</Action>
 
 		<Action Name="SitOnTheLeftEdgeOfIE" Type="Sequence" Loop="false">
-			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.left+100+Math.random()*300}" />
+			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.left+Math.min(Math.max(1,mascot.environment.activeIE.width-1),16+Math.random()*Math.max(1,Math.min(300,mascot.environment.activeIE.width-32)))}" />
 			<ActionReference Name="Stand" Duration="${100+Math.random()*100}" />
 			<ActionReference Name="Sit" Duration="${500+Math.random()*1000}" />
 		</Action>
 
 		<Action Name="SitOnTheRightEdgeOfIE" Type="Sequence" Loop="false">
-			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.right-100-Math.random()*300}" />
+			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.right-Math.min(Math.max(1,mascot.environment.activeIE.width-1),16+Math.random()*Math.max(1,Math.min(300,mascot.environment.activeIE.width-32)))}" />
 			<ActionReference Name="Stand" Duration="${100+Math.random()*100}" />
 			<ActionReference Name="Sit" Duration="${500+Math.random()*1000}" />
 		</Action>
 
 		<Action Name="JumpFromLeftEdgeOfIE" Type="Sequence" Loop="false">
-			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.left+Math.random()*50}" />
+			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.left+Math.random()*Math.max(1,Math.min(50,mascot.environment.activeIE.width-1))}" />
 			<ActionReference Name="Stand" Duration="${50+Math.random()*50}" />
 			<ActionReference Name="Falling" InitialVX="${-15-Math.random()*5}" InitialVY="${-20-Math.random()*5}"/>
 			<ActionReference Name="StandFromFloor" />
 		</Action>
 
 		<Action Name="JumpFromRightEdgeOfIE" Type="Sequence" Loop="false">
-			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.right-Math.random()*50}" />
+			<ActionReference Name="Walk" TargetX="${mascot.environment.activeIE.right-Math.random()*Math.max(1,Math.min(50,mascot.environment.activeIE.width-1))}" />
 			<ActionReference Name="Stand" Duration="${50+Math.random()*50}" />
 			<ActionReference Name="Falling" InitialVX="${15+Math.random()*5}" InitialVY="${-20-Math.random()*5}"/>
 			<ActionReference Name="StandFromFloor" />
 		</Action>
 
 		<Action Name="WalkLeftAlongIEAndSit" Type="Sequence" Loop="false">
-			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.left+100+Math.random()*300}" />
+			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.left+Math.min(Math.max(1,mascot.environment.activeIE.width-1),16+Math.random()*Math.max(1,Math.min(300,mascot.environment.activeIE.width-32)))}" />
 			<ActionReference Name="Stand" Duration="${100+Math.random()*100}" />
 			<ActionReference Name="Sit" Duration="${500+Math.random()*1000}" />
 		</Action>
 
 		<Action Name="WalkRightAlongIEAndSit" Type="Sequence" Loop="false">
-			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.right-100-Math.random()*300}" />
+			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.right-Math.min(Math.max(1,mascot.environment.activeIE.width-1),16+Math.random()*Math.max(1,Math.min(300,mascot.environment.activeIE.width-32)))}" />
 			<ActionReference Name="Stand" Duration="${100+Math.random()*100}" />
 			<ActionReference Name="Sit" Duration="${500+Math.random()*1000}" />
 		</Action>
 
 		<Action Name="WalkLeftAlongIEAndJump" Type="Sequence" Loop="false">
-			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.left+Math.random()*50}" />
+			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.left+Math.random()*Math.max(1,Math.min(50,mascot.environment.activeIE.width-1))}" />
 			<ActionReference Name="Falling" InitialVX="${-15-Math.random()*5}" InitialVY="${-20-Math.random()*5}"/>
 			<ActionReference Name="StandFromFloor" />
 		</Action>
 
 		<Action Name="WalkRightAlongIEAndJump" Type="Sequence" Loop="false">
-			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.right-Math.random()*50}" />
+			<ActionReference Name="Run" TargetX="${mascot.environment.activeIE.right-Math.random()*Math.max(1,Math.min(50,mascot.environment.activeIE.width-1))}" />
 			<ActionReference Name="Falling" InitialVX="${15+Math.random()*5}" InitialVY="${-20-Math.random()*5}"/>
 			<ActionReference Name="StandFromFloor" />
 		</Action>
@@ -671,7 +671,7 @@
 		</Action>
 
 		<Action Name="HoldOntoIEWall" Type="Sequence" Loop="false">
-			<ActionReference Name="ClimbWall" TargetY="${mascot.environment.activeIE.top+64 + Math.random()*(mascot.environment.activeIE.height-128)}" />
+			<ActionReference Name="ClimbWall" TargetY="${mascot.environment.activeIE.top+16 + Math.random()*Math.max(1,mascot.environment.activeIE.height-32)}" />
 		</Action>
 
 		<Action Name="ClimbIEWall" Type="Sequence" Loop="false">
@@ -679,11 +679,11 @@
 			<ActionReference Name="Offset" Y="-64" />
 			<ActionReference Name="Sit" Duration="5" />
 			<ActionReference Name="Stand" Duration="${10+Math.random()*10}" />
-			<ActionReference Name="Walk" TargetX="${mascot.lookRight ? mascot.environment.activeIE.left+Math.random()*100 : mascot.environment.activeIE.right-Math.random*100}" />
+			<ActionReference Name="Walk" TargetX="${mascot.lookRight ? mascot.environment.activeIE.left+Math.random()*Math.max(1,Math.min(100,mascot.environment.activeIE.width-1)) : mascot.environment.activeIE.right-Math.random()*Math.max(1,Math.min(100,mascot.environment.activeIE.width-1))}" />
 		</Action>
 
 		<Action Name="ClimbIEBottom" Type="Sequence" Loop="false">
-			<ActionReference Name="ClimbCeiling" TargetX="${mascot.environment.activeIE.left+64+(Math.random()*mascot.environment.activeIE.width-128)}" />
+			<ActionReference Name="ClimbCeiling" TargetX="${mascot.environment.activeIE.left+Math.min(Math.max(1,mascot.environment.activeIE.width-1),64+Math.random()*Math.max(1,mascot.environment.activeIE.width-128))}" />
 		</Action>
 
 		<Action Name="GrabIEBottomLeftWall" Type="Sequence" Loop="false">

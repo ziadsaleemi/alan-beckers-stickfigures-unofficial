@@ -4,6 +4,10 @@ set -euo pipefail
 APP_NAME="Alan Beckers Stickfigures"
 BUNDLE_ID="com.skittlq.alanbeckersstickfigures.unofficial"
 MIN_SYSTEM_VERSION="13.0"
+APP_VERSION="${APP_VERSION:-1.0}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
+MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
+MACOS_REQUIRE_NOTARIZATION="${MACOS_REQUIRE_NOTARIZATION:-0}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -25,6 +29,11 @@ fi
 
 if ! command -v swiftc >/dev/null 2>&1; then
   echo "swiftc is required to build the macOS app wrapper." >&2
+  exit 1
+fi
+
+if [ "$MACOS_REQUIRE_NOTARIZATION" = "1" ] && [ "$MACOS_CODESIGN_IDENTITY" = "-" ]; then
+  echo "MACOS_REQUIRE_NOTARIZATION=1 requires MACOS_CODESIGN_IDENTITY to be a Developer ID Application identity." >&2
   exit 1
 fi
 
@@ -74,6 +83,49 @@ cp -R "$ROOT_DIR/conf" "$JAVA_DIR/conf"
 cp -R "$ROOT_DIR/img" "$JAVA_DIR/img"
 cp "$ROOT_DIR"/lib/*.jar "$JAVA_DIR/lib/"
 
+sign_embedded_macos_libraries() {
+  if [ "$MACOS_CODESIGN_IDENTITY" = "-" ]; then
+    return 0
+  fi
+
+  if ! command -v unzip >/dev/null 2>&1 || ! command -v zip >/dev/null 2>&1; then
+    echo "zip and unzip are required to sign native libraries embedded in bundled JARs." >&2
+    exit 1
+  fi
+
+  local jar_path
+  for jar_path in "$JAVA_DIR/AlansStickfigures.jar" "$JAVA_DIR"/lib/*.jar; do
+    [ -f "$jar_path" ] || continue
+
+    local entries_file
+    entries_file="$(mktemp)"
+    unzip -Z1 "$jar_path" | grep -E '\.(dylib|jnilib)$' >"$entries_file" || true
+
+    if [ -s "$entries_file" ]; then
+      local temp_dir
+      temp_dir="$(mktemp -d)"
+
+      local entry
+      while IFS= read -r entry; do
+        unzip -qq "$jar_path" "$entry" -d "$temp_dir"
+
+        local native_path="$temp_dir/$entry"
+        if file "$native_path" | grep -q 'Mach-O'; then
+          codesign --force --sign "$MACOS_CODESIGN_IDENTITY" --options runtime --timestamp "$native_path"
+          codesign --verify --verbose=2 "$native_path"
+          (cd "$temp_dir" && zip -q "$jar_path" "$entry")
+        fi
+      done <"$entries_file"
+
+      rm -rf "$temp_dir"
+    fi
+
+    rm -f "$entries_file"
+  done
+}
+
+sign_embedded_macos_libraries
+
 cat >"$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -96,9 +148,9 @@ cat >"$CONTENTS_DIR/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>$APP_VERSION</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSHighResolutionCapable</key>
@@ -129,8 +181,16 @@ fi
 plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
 
 if command -v codesign >/dev/null 2>&1; then
-  codesign --force --deep --sign - "$APP_BUNDLE" 2>&1 | sed '/replacing existing signature/d'
-  codesign --verify --deep --strict "$APP_BUNDLE"
+  CODESIGN_ARGS=(--force --deep --sign "$MACOS_CODESIGN_IDENTITY")
+  if [ "$MACOS_CODESIGN_IDENTITY" != "-" ]; then
+    CODESIGN_ARGS+=(--options runtime --timestamp)
+  fi
+
+  codesign "${CODESIGN_ARGS[@]}" "$APP_BUNDLE" 2>&1 | sed '/replacing existing signature/d'
+  codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+elif [ "$MACOS_REQUIRE_NOTARIZATION" = "1" ]; then
+  echo "codesign is required for notarized release builds." >&2
+  exit 1
 fi
 
 echo "$APP_BUNDLE"

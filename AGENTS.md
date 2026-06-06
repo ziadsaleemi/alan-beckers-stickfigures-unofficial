@@ -70,6 +70,8 @@ Use the smallest relevant skill set; do not load every skill by default.
 - The macOS wrapper copies bundled Java resources to `~/Library/Application Support/AlanBeckersStickfigures/JavaRuntime`, writes the selected `ActiveShimeji` list into that runtime `conf/settings.properties`, and launches Java from that writable copy.
 - Use `./script/build_and_run.sh --verify` to build and launch the generated app in `dist/`, then verify both the native wrapper and Java child stay running.
 - Use `./script/package_macos.sh` to build `dist/Alan-Beckers-Stickfigures-macOS.dmg`.
+- Local macOS packages are ad-hoc signed by default. Public GitHub release DMGs require `MACOS_CODESIGN_IDENTITY` with a Developer ID Application identity plus Team API-key notarization credentials; do not tag a public macOS release until those GitHub secrets are configured.
+- The release workflow imports `MACOS_CERTIFICATE_P12`, signs with hardened runtime, notarizes the DMG, staples the ticket, and validates with `spctl`. Missing signing/notarization secrets should fail the macOS release job rather than publish an untrusted DMG.
 - Use `./script/package_windows.ps1` on Windows with JDK 17+ and WiX Toolset to build `dist/Alan-Beckers-Stickfigures-Windows.exe`.
 - `.github/workflows/release.yml` builds macOS DMG, Windows EXE, and a source ZIP, then creates or updates a GitHub Release for tag pushes or manual workflow dispatch.
 - `RunMac.command` is a root-level direct-JAR fallback launcher; the menu-bar/settings experience comes from the generated macOS app bundle.
