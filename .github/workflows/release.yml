@@ -1,0 +1,143 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to create or update, for example v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build DMG
+        run: ./script/package_macos.sh
+
+      - name: Inspect DMG
+        run: hdiutil imageinfo dist/Alan-Beckers-Stickfigures-macOS.dmg
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/Alan-Beckers-Stickfigures-macOS.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          choco install wixtoolset --no-progress -y
+          $wixPath = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"
+          if (Test-Path $wixPath) {
+            Add-Content -Path $env:GITHUB_PATH -Value $wixPath
+          }
+
+      - name: Build EXE installer
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag_name }}"
+          }
+          $version = $tag -replace '^v', ''
+          if ($version -notmatch '^\d+(\.\d+){0,3}$') {
+            $version = "1.0.0"
+          }
+          ./script/package_windows.ps1 -Version $version
+
+      - name: Upload Windows EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/Alan-Beckers-Stickfigures-Windows.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - build-macos
+      - build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Prepare source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            release_tag="${{ inputs.tag_name }}"
+          else
+            release_tag="${GITHUB_REF_NAME}"
+          fi
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          git archive --format=zip --output "release-assets/Alan-Beckers-Stickfigures-source-${release_tag}.zip" HEAD
+          cat > release-notes.md <<NOTES
+          Built release assets:
+          - macOS DMG
+          - Windows EXE installer
+          - Source ZIP
+
+          Platform notes:
+          - Windows and macOS include the same patched Java runtime, image sets, Hold Pointer action, and transparent-window shadow fix.
+          - Windows uses the original tray/config flow for choosing active stickfigures and interactive windows.
+          - macOS adds the native menu-bar wrapper, settings window, multi-display desktop handling, normal-window awareness, and visible-Dock handling.
+
+          GitHub also provides the standard Source code archives for this tag.
+          NOTES
+
+      - name: Create or update release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found." >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "Alan Beckers Stickfigures $RELEASE_TAG" \
+              --notes-file release-notes.md
+          fi

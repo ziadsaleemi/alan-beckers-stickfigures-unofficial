@@ -1,3 +1,6 @@
+*.DS_Store
+.DS_Store
 ShimejieeLog0.*
 error_log.txt
 alan-becker-stickfigures-setup.ifp
+dist/
