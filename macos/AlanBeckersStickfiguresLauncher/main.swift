@@ -6,6 +6,9 @@ private enum DefaultsKey {
     static let autoStart = "autoStartStickfigures"
     static let keepAlive = "restartStickfiguresIfTheyExit"
     static let enabledImageSets = "enabledStickfigureImageSets"
+    static let aiEnabled = "localAIEnabled"
+    static let ollamaBaseURL = "ollamaBaseURL"
+    static let ollamaModel = "ollamaModel"
 }
 
 private enum MascotAction: String {
@@ -25,6 +28,10 @@ private enum MascotAction: String {
     case grabCeiling
     case trip
     case dance
+
+    static let aiBehaviorChoices: [MascotAction] = [
+        .stand, .sit, .walk, .run, .dash, .trip, .dance, .climbWall
+    ]
 
     var repeatsAnimation: Bool {
         switch self {
@@ -48,6 +55,284 @@ private enum Motion {
     static let throwReleaseSpeed: CGFloat = 3
     static let throwVelocityLimit: CGFloat = 18
     static let freshDragVelocityAge: TimeInterval = 0.12
+}
+
+private enum LocalAIError: LocalizedError {
+    case invalidURL
+    case missingModel
+    case invalidResponse
+    case serverError(Int)
+    case invalidDecision
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Check the Ollama URL."
+        case .missingModel:
+            return "Choose a local Ollama model."
+        case .invalidResponse:
+            return "Ollama returned an unexpected response."
+        case .serverError(let statusCode):
+            return "Ollama returned HTTP \(statusCode)."
+        case .invalidDecision:
+            return "The model did not choose a supported action."
+        }
+    }
+}
+
+private struct OllamaModelInfo: Decodable {
+    struct Details: Decodable {
+        let parameterSize: String?
+        let quantizationLevel: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case parameterSize = "parameter_size"
+            case quantizationLevel = "quantization_level"
+        }
+    }
+
+    let name: String?
+    let model: String?
+    let size: Int64?
+    let details: Details?
+    let capabilities: [String]?
+
+    var modelName: String? {
+        let candidate = model ?? name
+        guard let candidate, !candidate.isEmpty else {
+            return nil
+        }
+        return candidate
+    }
+
+    var supportsChatCompletion: Bool {
+        guard let capabilities else {
+            return true
+        }
+        return capabilities.contains("completion") || capabilities.contains("tools")
+    }
+}
+
+private struct OllamaTagsResponse: Decodable {
+    let models: [OllamaModelInfo]
+}
+
+private struct OllamaChatMessage: Decodable {
+    let content: String
+}
+
+private struct OllamaChatResponse: Decodable {
+    let message: OllamaChatMessage?
+}
+
+private struct LocalAIActionDecision: Decodable {
+    let action: String
+}
+
+private final class LocalAIPlanner {
+    static let defaultBaseURL = "http://127.0.0.1:11434"
+
+    private let session: URLSession
+    private let decoder = JSONDecoder()
+
+    init() {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 4
+        configuration.timeoutIntervalForResource = 10
+        configuration.waitsForConnectivity = false
+        session = URLSession(configuration: configuration)
+    }
+
+    func normalizedBaseURLString(from rawValue: String) -> String {
+        normalizedBaseURL(from: rawValue)?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            ?? Self.defaultBaseURL
+    }
+
+    func fetchModels(baseURLString: String, completion: @escaping (Result<[String], Error>) -> Void) {
+        guard let url = endpoint("/api/tags", baseURLString: baseURLString) else {
+            DispatchQueue.main.async {
+                completion(.failure(LocalAIError.invalidURL))
+            }
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        session.dataTask(with: request) { [decoder] data, response, error in
+            let result: Result<[String], Error>
+            defer {
+                DispatchQueue.main.async {
+                    completion(result)
+                }
+            }
+
+            if let error {
+                result = .failure(error)
+                return
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                result = .failure(LocalAIError.invalidResponse)
+                return
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                result = .failure(LocalAIError.serverError(http.statusCode))
+                return
+            }
+
+            guard let data else {
+                result = .failure(LocalAIError.invalidResponse)
+                return
+            }
+
+            do {
+                let tags = try decoder.decode(OllamaTagsResponse.self, from: data)
+                let names = tags.models.filter(\.supportsChatCompletion).compactMap(\.modelName)
+                    .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                result = .success(names)
+            } catch {
+                result = .failure(error)
+            }
+        }.resume()
+    }
+
+    func requestAction(
+        baseURLString: String,
+        model: String,
+        characterName: String,
+        currentAction: MascotAction,
+        completion: @escaping (MascotAction?) -> Void
+    ) {
+        let selectedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !selectedModel.isEmpty else {
+            DispatchQueue.main.async {
+                completion(nil)
+            }
+            return
+        }
+
+        guard let url = endpoint("/api/chat", baseURLString: baseURLString),
+              let body = chatRequestBody(model: selectedModel, characterName: characterName, currentAction: currentAction) else {
+            DispatchQueue.main.async {
+                completion(nil)
+            }
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        session.dataTask(with: request) { [decoder] data, response, error in
+            let action: MascotAction?
+            defer {
+                DispatchQueue.main.async {
+                    completion(action)
+                }
+            }
+
+            guard error == nil,
+                  let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode),
+                  let data,
+                  let chat = try? decoder.decode(OllamaChatResponse.self, from: data),
+                  let content = chat.message?.content.trimmingCharacters(in: .whitespacesAndNewlines),
+                  let decisionData = content.data(using: .utf8),
+                  let decision = try? decoder.decode(LocalAIActionDecision.self, from: decisionData),
+                  let suggested = MascotAction(rawValue: decision.action),
+                  MascotAction.aiBehaviorChoices.contains(suggested) else {
+                action = nil
+                return
+            }
+
+            action = suggested
+        }.resume()
+    }
+
+    private func chatRequestBody(model: String, characterName: String, currentAction: MascotAction) -> Data? {
+        let allowed = MascotAction.aiBehaviorChoices.map(\.rawValue)
+        let schema: [String: Any] = [
+            "type": "object",
+            "properties": [
+                "action": [
+                    "type": "string",
+                    "enum": allowed
+                ]
+            ],
+            "required": ["action"]
+        ]
+        let userPrompt = [
+            "character": characterName,
+            "currentAction": currentAction.rawValue,
+            "allowedActions": allowed.joined(separator: ", "),
+            "instruction": "Choose one safe next desktop companion action. Prefer variety, but avoid repeating the same action too often."
+        ].map { "\($0.key): \($0.value)" }.joined(separator: "\n")
+
+        let payload: [String: Any] = [
+            "model": model,
+            "stream": false,
+            "keep_alive": "5m",
+            "format": schema,
+            "messages": [
+                [
+                    "role": "system",
+                    "content": "You select animation actions for a local desktop stickfigure. Return JSON only. Do not include private screen or window data."
+                ],
+                [
+                    "role": "user",
+                    "content": userPrompt
+                ]
+            ],
+            "options": [
+                "temperature": 0.7,
+                "num_predict": 40
+            ]
+        ]
+
+        return try? JSONSerialization.data(withJSONObject: payload)
+    }
+
+    private func endpoint(_ endpointPath: String, baseURLString: String) -> URL? {
+        guard let baseURL = normalizedBaseURL(from: baseURLString),
+              var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        let rootPath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = rootPath.isEmpty ? endpointPath : "/\(rootPath)\(endpointPath)"
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
+    private func normalizedBaseURL(from rawValue: String) -> URL? {
+        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.isEmpty {
+            value = Self.defaultBaseURL
+        }
+        if !value.contains("://") {
+            value = "http://\(value)"
+        }
+
+        guard var components = URLComponents(string: value),
+              components.scheme != nil,
+              components.host != nil else {
+            return nil
+        }
+
+        if let apiRange = components.path.range(of: "/api") {
+            components.path = String(components.path[..<apiRange.lowerBound])
+        }
+        components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if !components.path.isEmpty {
+            components.path = "/\(components.path)"
+        }
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
 }
 
 private struct PoseFrame {
@@ -897,6 +1182,11 @@ private final class Mascot {
     }
 
     private func chooseNextBehavior(in world: DesktopWorld) {
+        if let suggestedAction = controller?.consumeAISuggestion(for: self) {
+            chooseBehavior(suggestedAction, in: world)
+            return
+        }
+
         let roll = Int.random(in: 0..<100)
 
         if roll < 38 {
@@ -912,6 +1202,27 @@ private final class Mascot {
         } else if roll < 92 {
             runTowardWall(in: world)
         } else {
+            choose(.stand)
+        }
+    }
+
+    private func chooseBehavior(_ suggestedAction: MascotAction, in world: DesktopWorld) {
+        switch suggestedAction {
+        case .walk:
+            choose(.walk, targetX: randomTargetX(in: world))
+        case .run:
+            choose(.run, targetX: randomTargetX(in: world))
+        case .dash, .climbWall:
+            runTowardWall(in: world)
+        case .sit:
+            choose(.sit)
+        case .trip:
+            choose(.trip)
+        case .dance:
+            choose(.dance)
+        case .stand:
+            choose(.stand)
+        default:
             choose(.stand)
         }
     }
@@ -1249,10 +1560,13 @@ private final class Mascot {
 
 private final class MascotController: NSObject {
     private let world = DesktopWorld()
+    private let aiPlanner = LocalAIPlanner()
     private var timer: Timer?
     private var nextID = 1
     private(set) var mascots: [Mascot] = []
     private var imageSets: [ImageSet] = []
+    private var pendingAIRequests = Set<Int>()
+    private var aiSuggestions: [Int: MascotAction] = [:]
     var isRunning: Bool {
         timer != nil
     }
@@ -1308,6 +1622,8 @@ private final class MascotController: NSObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        pendingAIRequests.removeAll()
+        aiSuggestions.removeAll()
         mascots.forEach { $0.close() }
         mascots.removeAll()
         onStatusChanged?()
@@ -1352,20 +1668,75 @@ private final class MascotController: NSObject {
             return
         }
         mascot.close()
+        pendingAIRequests.remove(mascot.id)
+        aiSuggestions.removeValue(forKey: mascot.id)
         mascots.removeAll { $0 === mascot }
+    }
+
+    func consumeAISuggestion(for mascot: Mascot) -> MascotAction? {
+        guard localAIEnabled else {
+            return nil
+        }
+
+        if let suggestion = aiSuggestions.removeValue(forKey: mascot.id) {
+            requestAISuggestion(for: mascot)
+            return suggestion
+        }
+
+        requestAISuggestion(for: mascot)
+        return nil
     }
 
     private func tick() {
         world.refreshIfNeeded()
         mascots.forEach { $0.step(in: world) }
     }
+
+    private var localAIEnabled: Bool {
+        UserDefaults.standard.bool(forKey: DefaultsKey.aiEnabled)
+            && !(UserDefaults.standard.string(forKey: DefaultsKey.ollamaModel) ?? "").isEmpty
+    }
+
+    private func requestAISuggestion(for mascot: Mascot) {
+        guard localAIEnabled,
+              pendingAIRequests.insert(mascot.id).inserted else {
+            return
+        }
+
+        let id = mascot.id
+        let characterName = mascot.imageSet.name
+        let currentAction = mascot.action
+        let baseURL = UserDefaults.standard.string(forKey: DefaultsKey.ollamaBaseURL) ?? LocalAIPlanner.defaultBaseURL
+        let model = UserDefaults.standard.string(forKey: DefaultsKey.ollamaModel) ?? ""
+
+        aiPlanner.requestAction(
+            baseURLString: baseURL,
+            model: model,
+            characterName: characterName,
+            currentAction: currentAction
+        ) { [weak self] action in
+            guard let self else {
+                return
+            }
+
+            self.pendingAIRequests.remove(id)
+            guard self.mascots.contains(where: { $0.id == id }) else {
+                return
+            }
+
+            if let action {
+                self.aiSuggestions[id] = action
+            }
+        }
+    }
 }
 
-private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTextFieldDelegate {
     private static let appDisplayName = "Alan Beckers Stickfigures"
     private static let appSubtitle = "Your Own Stickman Companions!"
 
     private let controller = MascotController()
+    private let aiPlanner = LocalAIPlanner()
     private var statusItem: NSStatusItem?
     private var statusMenu = NSMenu()
     private var settingsWindow: NSWindow?
@@ -1375,6 +1746,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var restartButton: NSButton?
     private var autoStartCheckbox: NSButton?
     private var keepAliveCheckbox: NSButton?
+    private var aiEnabledCheckbox: NSButton?
+    private var ollamaURLField: NSTextField?
+    private var ollamaModelPopup: NSPopUpButton?
+    private var loadOllamaModelsButton: NSButton?
+    private var aiStatusLabel: NSTextField?
     private var imageSetCheckboxes: [String: NSButton] = [:]
 
     private var resourcesURL: URL {
@@ -1438,6 +1814,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         if defaults.object(forKey: DefaultsKey.keepAlive) == nil {
             defaults.set(false, forKey: DefaultsKey.keepAlive)
+        }
+        if defaults.object(forKey: DefaultsKey.aiEnabled) == nil {
+            defaults.set(false, forKey: DefaultsKey.aiEnabled)
+        }
+        if defaults.object(forKey: DefaultsKey.ollamaBaseURL) == nil {
+            defaults.set(LocalAIPlanner.defaultBaseURL, forKey: DefaultsKey.ollamaBaseURL)
         }
     }
 
@@ -1511,7 +1893,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func buildSettingsWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 760),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -1594,6 +1976,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             rows: [buildImageSetGrid()]
         )
 
+        let aiPanel = buildAISettingsPanel()
+
         restartButton = NSButton(title: "Restart", target: self, action: #selector(restartStickfigures))
         configureButton(restartButton!)
         let logButton = NSButton(title: "Open Logs", target: self, action: #selector(openLog))
@@ -1609,7 +1993,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
         resourcePathLabel = makeLabel("", font: NSFont.systemFont(ofSize: 11), color: .tertiaryLabelColor)
 
-        let stack = NSStackView(views: [headerStack, statusPanel, preferencesPanel, charactersPanel, buttonRow, resourcePathLabel!])
+        let stack = NSStackView(views: [headerStack, statusPanel, preferencesPanel, aiPanel, charactersPanel, buttonRow, resourcePathLabel!])
         stack.orientation = .vertical
         stack.alignment = .width
         stack.spacing = 14
@@ -1629,6 +2013,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             headerStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
             statusPanel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             preferencesPanel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            aiPanel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             charactersPanel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             resourcePathLabel!.widthAnchor.constraint(equalTo: stack.widthAnchor)
@@ -1636,6 +2021,60 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
         window.contentView = contentView
         return window
+    }
+
+    private func buildAISettingsPanel() -> NSView {
+        aiEnabledCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(aiEnabledChanged(_:)))
+
+        ollamaURLField = NSTextField(string: UserDefaults.standard.string(forKey: DefaultsKey.ollamaBaseURL) ?? LocalAIPlanner.defaultBaseURL)
+        ollamaURLField?.placeholderString = LocalAIPlanner.defaultBaseURL
+        ollamaURLField?.delegate = self
+        ollamaURLField?.target = self
+        ollamaURLField?.action = #selector(ollamaURLChanged(_:))
+        ollamaURLField?.widthAnchor.constraint(equalToConstant: 250).isActive = true
+
+        loadOllamaModelsButton = NSButton(title: "Load Models", target: self, action: #selector(loadOllamaModels))
+        configureButton(loadOllamaModelsButton!)
+
+        let urlControls = NSStackView(views: [ollamaURLField!, loadOllamaModelsButton!])
+        urlControls.orientation = .horizontal
+        urlControls.alignment = .centerY
+        urlControls.spacing = 8
+
+        ollamaModelPopup = NSPopUpButton()
+        ollamaModelPopup?.target = self
+        ollamaModelPopup?.action = #selector(ollamaModelChanged(_:))
+        ollamaModelPopup?.widthAnchor.constraint(greaterThanOrEqualToConstant: 250).isActive = true
+        populateOllamaModelPopup(with: storedOllamaModel().map { [$0] } ?? [])
+
+        aiStatusLabel = makeLabel("", font: NSFont.systemFont(ofSize: 11), color: .secondaryLabelColor)
+        aiStatusLabel?.maximumNumberOfLines = 2
+
+        let panel = makeSection(
+            title: "Local AI",
+            subtitle: "Use Ollama on this Mac for occasional behavior choices.",
+            rows: [
+                makeControlRow(
+                    title: "Enable AI behavior",
+                    detail: "Keep animation local and optional.",
+                    control: aiEnabledCheckbox!
+                ),
+                makeControlRow(
+                    title: "Ollama URL",
+                    detail: "Connect to the local Ollama API endpoint.",
+                    control: urlControls
+                ),
+                makeControlRow(
+                    title: "Model",
+                    detail: "Only chat-capable local models are shown.",
+                    control: ollamaModelPopup!
+                ),
+                aiStatusLabel!
+            ]
+        )
+
+        updateAIControls()
+        return panel
     }
 
     private func makeSection(title: String, subtitle: String, rows: [NSView]) -> NSView {
@@ -1836,6 +2275,60 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         UserDefaults.standard.set(selected.isEmpty ? Array(available.prefix(1)) : selected, forKey: DefaultsKey.enabledImageSets)
     }
 
+    private func storedOllamaModel() -> String? {
+        let value = UserDefaults.standard.string(forKey: DefaultsKey.ollamaModel)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value, !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private func populateOllamaModelPopup(with models: [String]) {
+        let uniqueModels = Array(Set(models)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        ollamaModelPopup?.removeAllItems()
+        ollamaModelPopup?.addItems(withTitles: uniqueModels)
+
+        let storedModel = storedOllamaModel()
+        let preferredModel = storedModel.flatMap { uniqueModels.contains($0) ? $0 : nil }
+            ?? uniqueModels.first { $0.localizedCaseInsensitiveContains("granite") }
+            ?? uniqueModels.first
+
+        if let preferredModel {
+            ollamaModelPopup?.selectItem(withTitle: preferredModel)
+            UserDefaults.standard.set(preferredModel, forKey: DefaultsKey.ollamaModel)
+        } else {
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.ollamaModel)
+        }
+
+        updateAIControls()
+    }
+
+    private func saveOllamaURLFromField() -> String {
+        let rawValue = ollamaURLField?.stringValue ?? LocalAIPlanner.defaultBaseURL
+        let normalized = aiPlanner.normalizedBaseURLString(from: rawValue)
+        ollamaURLField?.stringValue = normalized
+        UserDefaults.standard.set(normalized, forKey: DefaultsKey.ollamaBaseURL)
+        return normalized
+    }
+
+    private func updateAIControls() {
+        let defaults = UserDefaults.standard
+        let aiEnabled = defaults.bool(forKey: DefaultsKey.aiEnabled)
+        aiEnabledCheckbox?.state = aiEnabled ? .on : .off
+        ollamaURLField?.stringValue = defaults.string(forKey: DefaultsKey.ollamaBaseURL) ?? LocalAIPlanner.defaultBaseURL
+
+        let hasModel = (ollamaModelPopup?.numberOfItems ?? 0) > 0 && storedOllamaModel() != nil
+        ollamaModelPopup?.isEnabled = aiEnabled && hasModel
+        loadOllamaModelsButton?.isEnabled = true
+
+        if let aiStatusLabel, aiStatusLabel.stringValue.isEmpty {
+            aiStatusLabel.stringValue = aiEnabled
+                ? (hasModel ? "Local AI is ready." : "Load models to choose a chat model.")
+                : "Local AI is off."
+        }
+    }
+
     @objc private func toggleStickfigures() {
         if controller.isRunning {
             controller.stop()
@@ -1873,6 +2366,72 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         UserDefaults.standard.set(sender.state == .on, forKey: DefaultsKey.keepAlive)
     }
 
+    @objc private func aiEnabledChanged(_ sender: NSButton) {
+        UserDefaults.standard.set(sender.state == .on, forKey: DefaultsKey.aiEnabled)
+        appendLogLine(sender.state == .on ? "Local AI behavior enabled." : "Local AI behavior disabled.")
+        if sender.state == .on && (ollamaModelPopup?.numberOfItems ?? 0) == 0 {
+            loadOllamaModels()
+        } else {
+            aiStatusLabel?.stringValue = sender.state == .on ? "Local AI is ready." : "Local AI is off."
+            updateAIControls()
+        }
+    }
+
+    @objc private func ollamaURLChanged(_ sender: NSTextField) {
+        let normalized = saveOllamaURLFromField()
+        aiStatusLabel?.stringValue = "Ollama URL set to \(normalized)."
+    }
+
+    @objc private func ollamaModelChanged(_ sender: NSPopUpButton) {
+        guard let selectedModel = sender.selectedItem?.title, !selectedModel.isEmpty else {
+            return
+        }
+
+        UserDefaults.standard.set(selectedModel, forKey: DefaultsKey.ollamaModel)
+        aiStatusLabel?.stringValue = "Using \(selectedModel)."
+        appendLogLine("Local AI model selected: \(selectedModel).")
+        updateAIControls()
+    }
+
+    @objc private func loadOllamaModels() {
+        let baseURL = saveOllamaURLFromField()
+        loadOllamaModelsButton?.isEnabled = false
+        aiStatusLabel?.stringValue = "Loading Ollama models..."
+
+        aiPlanner.fetchModels(baseURLString: baseURL) { [weak self] result in
+            guard let self else {
+                return
+            }
+
+            self.loadOllamaModelsButton?.isEnabled = true
+            switch result {
+            case .success(let models):
+                self.populateOllamaModelPopup(with: models)
+                if models.isEmpty {
+                    self.aiStatusLabel?.stringValue = "No chat-capable Ollama models found."
+                    self.appendLogLine("Ollama model load found no chat-capable models at \(baseURL).")
+                } else {
+                    let selectedModel = self.storedOllamaModel() ?? models[0]
+                    self.aiStatusLabel?.stringValue = "Loaded \(models.count) local model\(models.count == 1 ? "" : "s"). Using \(selectedModel)."
+                    self.appendLogLine("Loaded Ollama models from \(baseURL): \(models.joined(separator: ", ")).")
+                }
+            case .failure(let error):
+                self.populateOllamaModelPopup(with: self.storedOllamaModel().map { [$0] } ?? [])
+                self.aiStatusLabel?.stringValue = "Could not load Ollama models: \(error.localizedDescription)"
+                self.appendLogLine("Failed to load Ollama models from \(baseURL): \(error.localizedDescription).")
+            }
+        }
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard let textField = obj.object as? NSTextField,
+              textField === ollamaURLField else {
+            return
+        }
+
+        _ = saveOllamaURLFromField()
+    }
+
     private func updateStatus() {
         statusValueLabel?.stringValue = controller.isRunning ? "On" : "Off"
         statusValueLabel?.textColor = .white
@@ -1886,6 +2445,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         for (name, checkbox) in imageSetCheckboxes {
             checkbox.state = selectedNames.contains(name) ? .on : .off
         }
+        updateAIControls()
         statusItem?.button?.title = controller.isRunning ? "ABS On" : "ABS"
         updateStatusMenu()
     }

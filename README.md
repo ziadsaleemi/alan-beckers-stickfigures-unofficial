@@ -56,6 +56,33 @@ macOS launcher output is written to `~/Library/Logs/AlanBeckersStickfigures.log`
 - On macOS, enabled stickfigure sets are controlled from the native settings window and stored in macOS user defaults.
 - Windows keeps the original Shimeji-ee Java runtime and native window support. macOS now uses a native Swift/AppKit sprite engine for smoother transparent overlay windows.
 
+### Local AI Behavior
+
+The native macOS app can optionally use a local Ollama model for occasional
+behavior choices. This is disabled by default and does not send screenshots,
+window titles, or desktop content to the model. The app only sends the
+stickfigure name, current action, and a small allowed-action list.
+
+In **Settings**:
+
+1. Enable **Local AI**.
+2. Set the Ollama URL, usually `http://127.0.0.1:11434`.
+3. Click **Load Models**.
+4. Choose a chat-capable model such as `granite4.1:3b`.
+
+The app filters out embedding-only Ollama models because they cannot answer
+chat/action requests. If model loading hangs on `127.0.0.1:11434`, check for a
+port conflict:
+
+```bash
+lsof -nP -iTCP:11434 -sTCP:LISTEN
+curl http://127.0.0.1:11434/api/tags
+```
+
+Only Ollama should own that local API port. A stale editor port-forward or
+helper process can intercept `127.0.0.1:11434` and make Ollama look broken even
+when the Ollama app is running.
+
 ### macOS Desktop Notes
 
 The macOS app treats all connected displays as one continuous desktop, keeps the menu bar as a real top edge, and keeps stickfigures above normal app windows and the visible Dock. The native engine passively reads normal window bounds so stickfigures can land, sit, fall, and walk on top of windows. It estimates the visible Dock surface and ignores the Dock's invisible reserved strip so figures do not hover on empty space.
