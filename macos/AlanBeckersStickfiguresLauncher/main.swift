@@ -28,9 +28,38 @@ private enum MascotAction: String {
     case grabCeiling
     case trip
     case dance
+    case lookAtMouse
+    case sitLookUp
+    case sitLegsUp
+    case sitLegsDown
+    case dangleLegs
+    case sprawl
+    case chaseMouse
+    case cursorHate
+    case cursorSpite
+    case lassoSpin
+    case stabbing
 
     static let aiBehaviorChoices: [MascotAction] = [
-        .stand, .sit, .walk, .run, .dash, .trip, .dance, .climbWall
+        .stand,
+        .sit,
+        .walk,
+        .run,
+        .dash,
+        .trip,
+        .dance,
+        .lookAtMouse,
+        .sitLookUp,
+        .sitLegsUp,
+        .sitLegsDown,
+        .dangleLegs,
+        .sprawl,
+        .chaseMouse,
+        .climbWall,
+        .cursorHate,
+        .cursorSpite,
+        .lassoSpin,
+        .stabbing
     ]
 
     var repeatsAnimation: Bool {
@@ -38,8 +67,20 @@ private enum MascotAction: String {
         case .land, .trip:
             return false
         case .stand, .sit, .walk, .run, .dash, .fall, .dragged, .thrown, .holdPointer,
-             .climbWall, .climbCeiling, .grabWall, .grabCeiling, .dance:
+             .climbWall, .climbCeiling, .grabWall, .grabCeiling, .dance, .lookAtMouse,
+             .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs, .sprawl, .chaseMouse,
+             .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
             return true
+        }
+    }
+
+    var isAIFloorPose: Bool {
+        switch self {
+        case .dance, .lookAtMouse, .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs,
+             .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+            return true
+        default:
+            return false
         }
     }
 }
@@ -202,6 +243,9 @@ private final class LocalAIPlanner {
         model: String,
         characterName: String,
         currentAction: MascotAction,
+        availableActions: [MascotAction],
+        environmentSummary: String,
+        nearbyCharacters: String,
         completion: @escaping (MascotAction?) -> Void
     ) {
         let selectedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -213,7 +257,14 @@ private final class LocalAIPlanner {
         }
 
         guard let url = endpoint("/api/chat", baseURLString: baseURLString),
-              let body = chatRequestBody(model: selectedModel, characterName: characterName, currentAction: currentAction) else {
+              let body = chatRequestBody(
+                model: selectedModel,
+                characterName: characterName,
+                currentAction: currentAction,
+                availableActions: availableActions,
+                environmentSummary: environmentSummary,
+                nearbyCharacters: nearbyCharacters
+              ) else {
             DispatchQueue.main.async {
                 completion(nil)
             }
@@ -239,10 +290,10 @@ private final class LocalAIPlanner {
                   let data,
                   let chat = try? decoder.decode(OllamaChatResponse.self, from: data),
                   let content = chat.message?.content.trimmingCharacters(in: .whitespacesAndNewlines),
-                  let decisionData = content.data(using: .utf8),
+                  let decisionData = Self.jsonData(from: content),
                   let decision = try? decoder.decode(LocalAIActionDecision.self, from: decisionData),
                   let suggested = MascotAction(rawValue: decision.action),
-                  MascotAction.aiBehaviorChoices.contains(suggested) else {
+                  availableActions.contains(suggested) else {
                 action = nil
                 return
             }
@@ -251,8 +302,15 @@ private final class LocalAIPlanner {
         }.resume()
     }
 
-    private func chatRequestBody(model: String, characterName: String, currentAction: MascotAction) -> Data? {
-        let allowed = MascotAction.aiBehaviorChoices.map(\.rawValue)
+    private func chatRequestBody(
+        model: String,
+        characterName: String,
+        currentAction: MascotAction,
+        availableActions: [MascotAction],
+        environmentSummary: String,
+        nearbyCharacters: String
+    ) -> Data? {
+        let allowed = availableActions.map(\.rawValue)
         let schema: [String: Any] = [
             "type": "object",
             "properties": [
@@ -263,11 +321,15 @@ private final class LocalAIPlanner {
             ],
             "required": ["action"]
         ]
+        let profile = characterProfile(for: characterName)
         let userPrompt = [
             "character": characterName,
+            "characterProfile": profile,
             "currentAction": currentAction.rawValue,
             "allowedActions": allowed.joined(separator: ", "),
-            "instruction": "Choose one safe next desktop companion action. Prefer variety, but avoid repeating the same action too often."
+            "environment": environmentSummary,
+            "nearbyCharacters": nearbyCharacters,
+            "instruction": "Choose one safe next desktop companion action. Prefer variety, use character personality, and respond with exactly one allowed action."
         ].map { "\($0.key): \($0.value)" }.joined(separator: "\n")
 
         let payload: [String: Any] = [
@@ -278,7 +340,7 @@ private final class LocalAIPlanner {
             "messages": [
                 [
                     "role": "system",
-                    "content": "You select animation actions for a local desktop stickfigure. Return JSON only. Do not include private screen or window data."
+                    "content": "You select animation actions for a local desktop stickfigure. Return JSON only. Pick only from allowedActions. Do not ask for screenshots, window titles, files, private data, or actions outside the list."
                 ],
                 [
                     "role": "user",
@@ -292,6 +354,47 @@ private final class LocalAIPlanner {
         ]
 
         return try? JSONSerialization.data(withJSONObject: payload)
+    }
+
+    private static func jsonData(from content: String) -> Data? {
+        if let data = content.data(using: .utf8),
+           (try? JSONSerialization.jsonObject(with: data)) != nil {
+            return data
+        }
+
+        guard let start = content.firstIndex(of: "{"),
+              let end = content.lastIndex(of: "}"),
+              start <= end else {
+            return nil
+        }
+
+        let json = String(content[start...end])
+        return json.data(using: .utf8)
+    }
+
+    private func characterProfile(for characterName: String) -> String {
+        switch characterName.lowercased() {
+        case "orange":
+            return "curious all-rounder and leader; explores, trips, dances, and checks the desktop"
+        case "blue":
+            return "calm playful helper; tends to sit, wander, dance, and inspect nearby motion"
+        case "green":
+            return "performer and showoff; prefers dance, dash, and expressive poses"
+        case "yellow":
+            return "technical builder; prefers looking, sitting, inspecting, and deliberate movement"
+        case "red":
+            return "impulsive and energetic; prefers chase, run, dash, trip, and playful movement"
+        case "purple":
+            return "restless and dramatic; prefers climbing, dashing, and quiet poses"
+        case "tco":
+            return "powerful intense fighter; prefers dash, climb, stand, and sudden movement"
+        case "tdl":
+            return "aggressive dramatic rival; prefers dash, climb, sprawl, and intense movement"
+        case "victim":
+            return "watchful desktop antagonist; prefers cursor-aware, lasso, work, and suspicious idle actions"
+        default:
+            return "desktop companion; prefer varied safe movement and idle poses"
+        }
     }
 
     private func endpoint(_ endpointPath: String, baseURLString: String) -> URL? {
@@ -499,6 +602,57 @@ private final class ImageSet {
         }
 
         return clips.values.first
+    }
+
+    func hasClip(named name: String) -> Bool {
+        clips[name] != nil
+    }
+
+    func supportsAIAction(_ action: MascotAction) -> Bool {
+        switch action {
+        case .stand:
+            return hasClip(named: "Stand")
+        case .sit:
+            return hasClip(named: "SitAndLookAtMouse") || hasClip(named: "Sit")
+        case .walk:
+            return hasClip(named: "Walk")
+        case .run:
+            return hasClip(named: "Run") || hasClip(named: "Dash") || hasClip(named: "Walk")
+        case .dash, .climbWall:
+            return hasClip(named: "Dash") && hasClip(named: "GrabWall")
+        case .trip:
+            return hasClip(named: "Tripping") || hasClip(named: "StandFromFloor")
+        case .dance:
+            return hasClip(named: "Dance")
+        case .lookAtMouse:
+            return hasClip(named: "SitAndLookAtMouse") || hasClip(named: "SitAndFaceMouse") || hasClip(named: "Sit")
+        case .sitLookUp:
+            return hasClip(named: "SitAndLookUp")
+        case .sitLegsUp:
+            return hasClip(named: "SitWithLegsUp")
+        case .sitLegsDown:
+            return hasClip(named: "SitWithLegsDown")
+        case .dangleLegs:
+            return hasClip(named: "SitAndDangleLegs")
+        case .sprawl:
+            return hasClip(named: "Sprawl")
+        case .chaseMouse:
+            return hasClip(named: "Run") || hasClip(named: "Walk")
+        case .cursorHate:
+            return hasClip(named: "CursorHate")
+        case .cursorSpite:
+            return hasClip(named: "CursorSpite")
+        case .lassoSpin:
+            return hasClip(named: "LassoSpin")
+        case .stabbing:
+            return hasClip(named: "Stabbing")
+        case .fall, .dragged, .thrown, .land, .holdPointer, .climbCeiling, .grabWall, .grabCeiling:
+            return false
+        }
+    }
+
+    func supportedAIActions() -> [MascotAction] {
+        MascotAction.aiBehaviorChoices.filter { supportsAIAction($0) }
     }
 
     func stillClip(
@@ -1079,7 +1233,11 @@ private final class Mascot {
             nextDecisionTick = Int.random(in: 24...55)
         case .trip:
             velocity = CGVector(dx: lookRight ? Motion.tripSlideSpeed : -Motion.tripSlideSpeed, dy: 0)
-        case .walk, .run, .dash, .dragged, .holdPointer, .climbWall, .climbCeiling, .dance:
+        case .dance, .lookAtMouse, .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs,
+             .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+            velocity = .zero
+            nextDecisionTick = Int.random(in: 75...210)
+        case .walk, .run, .dash, .dragged, .holdPointer, .climbWall, .climbCeiling, .chaseMouse:
             velocity = .zero
         }
     }
@@ -1109,14 +1267,17 @@ private final class Mascot {
             stepWallClimb(in: world)
         case .climbCeiling:
             stepCeilingMove(in: world)
+        case .chaseMouse:
+            stepChaseMouse(in: world)
         case .trip:
             stepTrip(in: world)
             if actionTick > currentClipDuration(defaultDuration: 90) {
                 choose(.stand)
             }
-        case .dance:
+        case .dance, .lookAtMouse, .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs,
+             .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
             _ = settleOnGround(in: world)
-            if actionTick > currentClipDuration(defaultDuration: 90) {
+            if actionTick > nextDecisionTick {
                 choose(.stand)
             }
         case .grabWall:
@@ -1187,23 +1348,7 @@ private final class Mascot {
             return
         }
 
-        let roll = Int.random(in: 0..<100)
-
-        if roll < 38 {
-            choose(.walk, targetX: randomTargetX(in: world))
-        } else if roll < 56 {
-            choose(.run, targetX: randomTargetX(in: world))
-        } else if roll < 67 {
-            choose(.sit)
-        } else if roll < 77 {
-            choose(.trip)
-        } else if roll < 84 {
-            choose(.dance)
-        } else if roll < 92 {
-            runTowardWall(in: world)
-        } else {
-            choose(.stand)
-        }
+        chooseBehavior(fallbackBehaviorAction(), in: world)
     }
 
     private func chooseBehavior(_ suggestedAction: MascotAction, in world: DesktopWorld) {
@@ -1220,11 +1365,44 @@ private final class Mascot {
             choose(.trip)
         case .dance:
             choose(.dance)
+        case .lookAtMouse:
+            lookRight = NSEvent.mouseLocation.x > anchor.x
+            choose(.lookAtMouse)
+        case .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs, .sprawl,
+             .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+            choose(suggestedAction)
+        case .chaseMouse:
+            choose(.chaseMouse)
         case .stand:
             choose(.stand)
         default:
             choose(.stand)
         }
+    }
+
+    private func fallbackBehaviorAction() -> MascotAction {
+        let supported = Set(supportedAIActions())
+        let weighted: [MascotAction] = [
+            .walk, .walk, .walk, .walk,
+            .run, .run,
+            .sit, .sit,
+            .stand, .stand,
+            .lookAtMouse, .sitLookUp,
+            .sitLegsUp, .sitLegsDown, .dangleLegs,
+            .sprawl,
+            .trip,
+            .dance,
+            .chaseMouse,
+            .climbWall,
+            .cursorHate, .cursorSpite, .lassoSpin, .stabbing
+        ].filter { supported.contains($0) }
+
+        return weighted.randomElement() ?? .stand
+    }
+
+    func supportedAIActions() -> [MascotAction] {
+        let actions = imageSet.supportedAIActions()
+        return actions.isEmpty ? [.stand] : actions
     }
 
     private func runTowardWall(in world: DesktopWorld) {
@@ -1297,6 +1475,21 @@ private final class Mascot {
         }
     }
 
+    private func stepChaseMouse(in world: DesktopWorld) {
+        let mouse = NSEvent.mouseLocation
+        lookRight = mouse.x > anchor.x
+        let distance = mouse.x - anchor.x
+        let step = min(abs(distance), Motion.runSpeed) * (distance >= 0 ? 1 : -1)
+        anchor.x += step
+        guard settleOnGround(in: world) else {
+            return
+        }
+
+        if abs(distance) < 36 || actionTick > 135 {
+            choose(imageSet.supportsAIAction(.lookAtMouse) ? .lookAtMouse : .stand)
+        }
+    }
+
     private func stepFall(in world: DesktopWorld) {
         velocity.dy -= 0.65
         velocity.dx *= 0.98
@@ -1347,7 +1540,7 @@ private final class Mascot {
         switch action {
         case .walk:
             return Motion.walkSpeed
-        case .run:
+        case .run, .chaseMouse:
             return Motion.runSpeed
         case .dash:
             return Motion.dashSpeed
@@ -1502,6 +1695,28 @@ private final class Mascot {
             return imageSet.clip(named: "Tripping", fallback: ["StandFromFloor", "Stand"])
         case .dance:
             return imageSet.clip(named: "Dance", fallback: ["Stand"])
+        case .lookAtMouse:
+            return imageSet.clip(named: "SitAndLookAtMouse", fallback: ["SitAndFaceMouse", "Sit", "Stand"])
+        case .sitLookUp:
+            return imageSet.clip(named: "SitAndLookUp", fallback: ["SitAndLookAtMouse", "Sit", "Stand"])
+        case .sitLegsUp:
+            return imageSet.clip(named: "SitWithLegsUp", fallback: ["Sit", "Stand"])
+        case .sitLegsDown:
+            return imageSet.clip(named: "SitWithLegsDown", fallback: ["Sit", "Stand"])
+        case .dangleLegs:
+            return imageSet.clip(named: "SitAndDangleLegs", fallback: ["SitWithLegsDown", "Sit", "Stand"])
+        case .sprawl:
+            return imageSet.clip(named: "Sprawl", fallback: ["Sit", "Stand"])
+        case .chaseMouse:
+            return imageSet.clip(named: "Run", fallback: ["Walk", "Dash", "Stand"])
+        case .cursorHate:
+            return imageSet.clip(named: "CursorHate", fallback: ["SitAndLookAtMouse", "Stand"])
+        case .cursorSpite:
+            return imageSet.clip(named: "CursorSpite", fallback: ["CursorHate", "Stand"])
+        case .lassoSpin:
+            return imageSet.clip(named: "LassoSpin", fallback: ["Stand"])
+        case .stabbing:
+            return imageSet.clip(named: "Stabbing", fallback: ["CursorHate", "Stand"])
         }
     }
 
@@ -1571,6 +1786,7 @@ private final class MascotController: NSObject {
         timer != nil
     }
     var onStatusChanged: (() -> Void)?
+    var onAIEvent: ((String) -> Void)?
 
     func loadImageSets(from imageRootURL: URL) {
         guard let urls = try? FileManager.default.contentsOfDirectory(
@@ -1706,14 +1922,25 @@ private final class MascotController: NSObject {
         let id = mascot.id
         let characterName = mascot.imageSet.name
         let currentAction = mascot.action
+        let availableActions = mascot.supportedAIActions()
+        let environmentSummary = aiEnvironmentSummary(for: mascot)
+        let nearbyCharacters = aiNearbyCharacters(for: mascot)
         let baseURL = UserDefaults.standard.string(forKey: DefaultsKey.ollamaBaseURL) ?? LocalAIPlanner.defaultBaseURL
         let model = UserDefaults.standard.string(forKey: DefaultsKey.ollamaModel) ?? ""
+
+        guard !availableActions.isEmpty else {
+            pendingAIRequests.remove(id)
+            return
+        }
 
         aiPlanner.requestAction(
             baseURLString: baseURL,
             model: model,
             characterName: characterName,
-            currentAction: currentAction
+            currentAction: currentAction,
+            availableActions: availableActions,
+            environmentSummary: environmentSummary,
+            nearbyCharacters: nearbyCharacters
         ) { [weak self] action in
             guard let self else {
                 return
@@ -1726,8 +1953,57 @@ private final class MascotController: NSObject {
 
             if let action {
                 self.aiSuggestions[id] = action
+                self.onAIEvent?("AI suggested \(action.rawValue) for \(characterName).")
             }
         }
+    }
+
+    private func aiEnvironmentSummary(for mascot: Mascot) -> String {
+        let anchor = mascot.anchor
+        let ground = world.groundY(for: anchor)
+        let surface = world.surfaceBelow(anchor: anchor, tolerance: 120)
+        let surfaceDescription: String
+        if surface?.title == "Dock" {
+            surfaceDescription = "near visible Dock surface"
+        } else if surface != nil {
+            surfaceDescription = "on or near a normal app window surface"
+        } else {
+            surfaceDescription = "on desktop floor"
+        }
+
+        let leftDistance = abs(anchor.x - world.leftWallX(near: anchor))
+        let rightDistance = abs(world.rightWallX(near: anchor) - anchor.x)
+        let ceilingDistance = abs(world.ceilingY(atX: anchor.x) - anchor.y)
+        let mouse = NSEvent.mouseLocation
+        let mouseDistance = hypot(mouse.x - anchor.x, mouse.y - anchor.y)
+        let mouseDirection = mouse.x >= anchor.x ? "right" : "left"
+
+        return [
+            surfaceDescription,
+            "heightFromGround=\(Int(anchor.y - ground))",
+            "leftWall=\(Int(leftDistance))",
+            "rightWall=\(Int(rightDistance))",
+            "ceiling=\(Int(ceilingDistance))",
+            "mouse=\(mouseDirection) \(Int(mouseDistance))px away"
+        ].joined(separator: "; ")
+    }
+
+    private func aiNearbyCharacters(for mascot: Mascot) -> String {
+        let neighbors = mascots.compactMap { other -> String? in
+            guard other !== mascot else {
+                return nil
+            }
+
+            let distance = hypot(other.anchor.x - mascot.anchor.x, other.anchor.y - mascot.anchor.y)
+            guard distance < 320 else {
+                return nil
+            }
+
+            let direction = other.anchor.x >= mascot.anchor.x ? "right" : "left"
+            return "\(other.imageSet.name) \(direction) \(Int(distance))px"
+        }
+
+        return neighbors.isEmpty ? "none nearby" : neighbors.joined(separator: ", ")
     }
 }
 
@@ -1778,6 +2054,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         controller.loadImageSets(from: imageRootURL)
         controller.onStatusChanged = { [weak self] in
             self?.updateStatus()
+        }
+        controller.onAIEvent = { [weak self] message in
+            self?.appendLogLine(message)
         }
         configureStatusItem()
         showSettingsWindow()

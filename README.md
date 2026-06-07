@@ -58,10 +58,12 @@ macOS launcher output is written to `~/Library/Logs/AlanBeckersStickfigures.log`
 
 ### Local AI Behavior
 
-The native macOS app can optionally use a local Ollama model for occasional
+The native macOS app can optionally use a local Ollama model for dynamic
 behavior choices. This is disabled by default and does not send screenshots,
 window titles, or desktop content to the model. The app only sends the
-stickfigure name, current action, and a small allowed-action list.
+stickfigure name, current action, supported action names, nearby-character
+metadata, and sanitized desktop context such as wall distance, Dock/window
+surface type, and mouse distance.
 
 In **Settings**:
 
@@ -71,8 +73,12 @@ In **Settings**:
 4. Choose a chat-capable model such as `granite4.1:3b`.
 
 The app filters out embedding-only Ollama models because they cannot answer
-chat/action requests. If model loading hangs on `127.0.0.1:11434`, check for a
-port conflict:
+chat/action requests. AI behavior is constrained to sprite-backed actions each
+character actually supports, including common actions such as walk, run, dash,
+trip, dance, sit poses, sprawl, chase mouse, and victim-specific cursor/lasso
+actions when those sprites are present.
+
+If model loading hangs on `127.0.0.1:11434`, check for a port conflict:
 
 ```bash
 lsof -nP -iTCP:11434 -sTCP:LISTEN
