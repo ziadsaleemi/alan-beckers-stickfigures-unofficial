@@ -91,14 +91,16 @@ trading places, building/inspecting together, victim trap/lasso beats, paired
 patrols, playful chases, short sparring/fighting beats, teasing, observing, and
 shared celebrations. These actions have generated role-play sprite frames under
 each `img/<Stickfigure>/` directory and generated `Role...` clips in each
-`actions.xml`. The generated frames reuse the source sprite family proportions:
-filled-head characters keep their shorter, thinner limbs, while
-Orange/TCO/TDL/victim keep their taller ring-head proportions and original
-colors. The generated action set includes paired hug, tug, high-five, argument,
-comfort/rescue, trap, patrol, trade-place, chase, spar, tease/reaction,
-celebration, and observation poses. Close-contact scenes first move the
-characters together, then play the paired action so the result reads as an
-interaction instead of two unrelated idle choices.
+`actions.xml`. The generated frames are source-derived copies of existing
+character artwork, so the stickfigure proportions, line weight, special head
+style, colors, anchors, and sprite dimensions stay matched to the original
+image set. The generator uses per-character overrides to avoid prop-heavy or
+effect-heavy source frames for generic role actions. The generated action set
+includes paired hug, tug, high-five, argument, comfort/rescue, trap, patrol,
+trade-place, chase, spar, tease/reaction, celebration, and observation clips.
+Close-contact scenes first move the characters together, then play the paired
+action so the result reads as an interaction instead of two unrelated idle
+choices.
 
 These interactions are built from the shipped sprites and are biased by story
 relationships, such as TCO/TDL rivalry, victim's suspicious behavior, and the

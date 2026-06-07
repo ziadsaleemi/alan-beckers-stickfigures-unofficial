@@ -355,15 +355,15 @@
 
 		<Action Name="RoleTugPull" Type="Animate" BorderType="Floor">
 			<Animation>
-				<Pose Image="/role_tug_pull01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
-				<Pose Image="/role_tug_pull02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tug_pull01.png" ImageAnchor="64,120" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tug_pull02.png" ImageAnchor="64,120" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
 
 		<Action Name="RoleTugPulled" Type="Animate" BorderType="Floor">
 			<Animation>
-				<Pose Image="/role_tug_pulled01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
-				<Pose Image="/role_tug_pulled02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tug_pulled01.png" ImageAnchor="64,120" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tug_pulled02.png" ImageAnchor="64,120" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
 
@@ -411,8 +411,8 @@
 
 		<Action Name="RoleVictimTrap" Type="Animate" BorderType="Floor">
 			<Animation>
-				<Pose Image="/role_victim_trap01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
-				<Pose Image="/role_victim_trap02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_victim_trap01.png" ImageAnchor="64,133" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_victim_trap02.png" ImageAnchor="64,133" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
 

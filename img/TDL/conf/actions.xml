@@ -277,14 +277,14 @@
 		<Action Name="RoleCopy" Type="Animate" BorderType="Floor">
 			<Animation>
 				<Pose Image="/role_copy01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
-				<Pose Image="/role_copy02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_copy02.png" ImageAnchor="64,126" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
 
 		<Action Name="RoleGuard" Type="Animate" BorderType="Floor">
 			<Animation>
 				<Pose Image="/role_guard01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
-				<Pose Image="/role_guard02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_guard02.png" ImageAnchor="64,126" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
 
@@ -360,8 +360,8 @@
 
 		<Action Name="RoleBuildTogether" Type="Animate" BorderType="Floor">
 			<Animation>
-				<Pose Image="/role_build_together01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
-				<Pose Image="/role_build_together02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_build_together01.png" ImageAnchor="64,126" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_build_together02.png" ImageAnchor="64,126" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
 
@@ -444,8 +444,8 @@
 
 		<Action Name="RoleObserve" Type="Animate" BorderType="Floor">
 			<Animation>
-				<Pose Image="/role_observe01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
-				<Pose Image="/role_observe02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_observe01.png" ImageAnchor="64,126" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_observe02.png" ImageAnchor="64,126" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
 
