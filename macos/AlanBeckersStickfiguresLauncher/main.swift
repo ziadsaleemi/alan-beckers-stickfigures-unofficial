@@ -234,7 +234,13 @@ private final class ImageSet {
 
     func pointerHoldClip() -> ActionClip? {
         switch name.lowercased() {
-        case "tco", "tdl":
+        case "tdl":
+            return stillClip(
+                named: "Stand",
+                preferredImages: ["stand01.png"],
+                fallback: ["Falling"]
+            )
+        case "tco":
             return stillClip(
                 named: "GrabCeiling",
                 preferredImages: ["hang01.png"],
