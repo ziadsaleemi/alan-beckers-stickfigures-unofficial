@@ -25,6 +25,16 @@ private enum MascotAction: String {
     case grabCeiling
     case trip
     case dance
+
+    var repeatsAnimation: Bool {
+        switch self {
+        case .land, .trip:
+            return false
+        case .stand, .sit, .walk, .run, .dash, .fall, .dragged, .thrown, .holdPointer,
+             .climbWall, .climbCeiling, .grabWall, .grabCeiling, .dance:
+            return true
+        }
+    }
 }
 
 private enum Motion {
@@ -62,12 +72,12 @@ private final class ActionClip {
         totalDuration
     }
 
-    func frame(at tick: Int) -> PoseFrame? {
+    func frame(at tick: Int, repeats: Bool = true) -> PoseFrame? {
         guard !frames.isEmpty else {
             return nil
         }
 
-        var remaining = tick % totalDuration
+        var remaining = repeats ? tick % totalDuration : min(max(0, tick), totalDuration - 1)
         for frame in frames {
             remaining -= max(1, frame.duration)
             if remaining < 0 {
@@ -180,6 +190,8 @@ private final class ImageSet {
     let directoryURL: URL
     let clips: [String: ActionClip]
     private var imageCache: [String: NSImage] = [:]
+    private var visibleBoundsCache: [String: CGRect] = [:]
+    private var upperBodyBoundsCache: [String: CGRect] = [:]
     private var stillClipCache: [String: ActionClip] = [:]
 
     init(name: String, directoryURL: URL) {
@@ -262,15 +274,19 @@ private final class ImageSet {
     }
 
     func landingClip() -> ActionClip? {
-        if name.lowercased() == "victim" {
-            return stillClip(
-                named: "Stand",
-                preferredImages: ["stand01.png"],
-                fallback: ["StandFromFloor", "Bouncing"]
-            )
+        return clip(named: "StandFromFloor", fallback: ["Bouncing", "Stand"])
+    }
+
+    func landingToStandAnchorAdjustment(from landingFrame: PoseFrame, lookRight: Bool) -> CGFloat {
+        guard let standFrame = clip(named: "Stand")?.frames.first else {
+            return 0
         }
 
-        return clip(named: "StandFromFloor", fallback: ["Bouncing", "Stand"])
+        let offset: (PoseFrame, Bool) -> CGFloat = name.lowercased() == "victim"
+            ? upperBodyCenterOffset
+            : visibleCenterOffset
+
+        return offset(landingFrame, lookRight) - offset(standFrame, lookRight)
     }
 
     func image(named imageName: String) -> NSImage? {
@@ -286,6 +302,12 @@ private final class ImageSet {
 
         let pixelSize = NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
         representation.size = pixelSize
+        visibleBoundsCache[imageName] = visibleBounds(in: representation, fallbackSize: pixelSize)
+        upperBodyBoundsCache[imageName] = visibleBounds(
+            in: representation,
+            fallbackSize: pixelSize,
+            maxY: Int(CGFloat(representation.pixelsHigh) * 0.56)
+        )
 
         let image = NSImage(size: pixelSize)
         image.addRepresentation(representation)
@@ -293,6 +315,71 @@ private final class ImageSet {
 
         imageCache[imageName] = image
         return image
+    }
+
+    private func visibleCenterOffset(for frame: PoseFrame, lookRight: Bool) -> CGFloat {
+        guard let image = image(named: frame.imageName) else {
+            return 0
+        }
+
+        let bounds = visibleBoundsCache[frame.imageName] ?? CGRect(origin: .zero, size: image.size)
+        return centerOffset(bounds.midX, anchorX: frame.anchor.x, lookRight: lookRight)
+    }
+
+    private func upperBodyCenterOffset(for frame: PoseFrame, lookRight: Bool) -> CGFloat {
+        guard let image = image(named: frame.imageName) else {
+            return 0
+        }
+
+        let bounds = upperBodyBoundsCache[frame.imageName]
+            ?? visibleBoundsCache[frame.imageName]
+            ?? CGRect(origin: .zero, size: image.size)
+        return centerOffset(bounds.midX, anchorX: frame.anchor.x, lookRight: lookRight)
+    }
+
+    private func centerOffset(_ centerX: CGFloat, anchorX: CGFloat, lookRight: Bool) -> CGFloat {
+        lookRight ? anchorX - centerX : centerX - anchorX
+    }
+
+    private func visibleBounds(
+        in representation: NSBitmapImageRep,
+        fallbackSize: NSSize,
+        maxY: Int? = nil
+    ) -> CGRect {
+        guard representation.hasAlpha else {
+            return CGRect(origin: .zero, size: fallbackSize)
+        }
+
+        var minX = representation.pixelsWide
+        var minY = representation.pixelsHigh
+        var maxOpaqueX = -1
+        var maxOpaqueY = -1
+
+        let yLimit = min(maxY ?? representation.pixelsHigh, representation.pixelsHigh)
+        for y in 0..<yLimit {
+            for x in 0..<representation.pixelsWide {
+                guard let color = representation.colorAt(x: x, y: y),
+                      color.alphaComponent > 0.01 else {
+                    continue
+                }
+
+                minX = min(minX, x)
+                minY = min(minY, y)
+                maxOpaqueX = max(maxOpaqueX, x)
+                maxOpaqueY = max(maxOpaqueY, y)
+            }
+        }
+
+        guard maxOpaqueX >= minX, maxOpaqueY >= minY else {
+            return CGRect(origin: .zero, size: fallbackSize)
+        }
+
+        return CGRect(
+            x: CGFloat(minX),
+            y: CGFloat(minY),
+            width: CGFloat(maxOpaqueX - minX + 1),
+            height: CGFloat(maxOpaqueY - minY + 1)
+        )
     }
 }
 
@@ -669,6 +756,7 @@ private final class Mascot {
     private var renderedImageName: String?
     private var renderedLookRight = false
     private var renderedSize = CGSize.zero
+    private var needsImmediateRender = false
 
     init(id: Int, imageSet: ImageSet, anchor: CGPoint, controller: MascotController) {
         self.id = id
@@ -687,6 +775,7 @@ private final class Mascot {
     func choose(_ newAction: MascotAction, targetX: CGFloat? = nil, targetY: CGFloat? = nil) {
         action = newAction
         actionTick = 0
+        needsImmediateRender = true
         self.targetX = targetX
         self.targetY = targetY
 
@@ -762,7 +851,9 @@ private final class Mascot {
         }
 
         keepInsideDesktop(world)
-        render(immediate: action == .dragged || action == .holdPointer)
+        let immediate = needsImmediateRender || action == .dragged || action == .holdPointer
+        render(immediate: immediate)
+        needsImmediateRender = false
     }
 
     func beginDrag(at mouse: CGPoint) {
@@ -927,7 +1018,10 @@ private final class Mascot {
 
     private func stepLanding(in world: DesktopWorld) {
         _ = settleOnGround(in: world)
-        if actionTick > currentClipDuration(defaultDuration: 18) {
+        if actionTick >= currentClipDuration(defaultDuration: 18) {
+            if let landingFrame = currentFrame() {
+                anchor.x += imageSet.landingToStandAnchorAdjustment(from: landingFrame, lookRight: lookRight)
+            }
             choose(.stand)
         }
     }
@@ -1060,7 +1154,7 @@ private final class Mascot {
 
     private func currentFrame() -> PoseFrame? {
         let clip = clipForCurrentAction()
-        return clip?.frame(at: actionTick)
+        return clip?.frame(at: actionTick, repeats: action.repeatsAnimation)
     }
 
     private func currentClipDuration(defaultDuration: Int) -> Int {
@@ -1107,8 +1201,6 @@ private final class Mascot {
         }
 
         let rect = spriteRect(for: frame, image: image)
-
-        window.setFrame(rect, display: immediate)
         let frameChanged = renderedImageName != frame.imageName || renderedLookRight != lookRight || renderedSize != rect.size
         if frameChanged {
             view.frame = CGRect(origin: .zero, size: rect.size)
@@ -1118,6 +1210,11 @@ private final class Mascot {
             renderedImageName = frame.imageName
             renderedLookRight = lookRight
             renderedSize = rect.size
+        }
+
+        window.setFrame(rect, display: false)
+        if frameChanged || immediate {
+            view.needsDisplay = true
             if immediate {
                 view.displayIfNeeded()
             }
