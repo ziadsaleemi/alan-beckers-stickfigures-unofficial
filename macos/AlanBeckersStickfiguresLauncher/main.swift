@@ -17,6 +17,7 @@ private enum MascotAction: String {
     case fall
     case dragged
     case thrown
+    case land
     case holdPointer
     case climbWall
     case climbCeiling
@@ -34,6 +35,9 @@ private enum Motion {
     static let ceilingSpeed: CGFloat = 4.2
     static let tripSlideSpeed: CGFloat = 3.2
     static let dropTolerance: CGFloat = 18
+    static let throwReleaseSpeed: CGFloat = 3
+    static let throwVelocityLimit: CGFloat = 18
+    static let freshDragVelocityAge: TimeInterval = 0.12
 }
 
 private struct PoseFrame {
@@ -590,6 +594,7 @@ private final class Mascot {
     var dragOffset = CGVector(dx: 0, dy: 0)
     var lastDragLocation: CGPoint?
     var lastDragVelocity = CGVector(dx: 0, dy: 0)
+    var lastDragUpdate = Date.distantPast
     var nextDecisionTick = 0
     var wallSide: CGFloat = -1
     private var renderedImageName: String?
@@ -618,17 +623,12 @@ private final class Mascot {
 
         switch newAction {
         case .thrown:
-            velocity = lastDragVelocity
-            if abs(velocity.dx) < 2 {
-                velocity.dx = lookRight ? 7 : -7
-            }
-            if abs(velocity.dy) < 2 {
-                velocity.dy = 8
-            }
+            velocity = limitedThrowVelocity(lastDragVelocity)
+            updateLookDirectionFromVelocity()
         case .fall:
             velocity.dy = min(velocity.dy, -2)
             updateLookDirectionFromVelocity()
-        case .stand, .sit:
+        case .stand, .sit, .land:
             velocity = .zero
             nextDecisionTick = Int.random(in: 55...180)
         case .grabWall, .grabCeiling:
@@ -658,6 +658,8 @@ private final class Mascot {
             stepThrown(in: world)
         case .fall:
             stepFall(in: world)
+        case .land:
+            stepLanding(in: world)
         case .walk, .run, .dash:
             stepHorizontalMove(in: world)
         case .climbWall:
@@ -698,6 +700,7 @@ private final class Mascot {
         dragOffset = CGVector(dx: anchor.x - mouse.x, dy: anchor.y - mouse.y)
         lastDragLocation = mouse
         lastDragVelocity = .zero
+        lastDragUpdate = Date()
         choose(.dragged)
     }
 
@@ -706,12 +709,18 @@ private final class Mascot {
             lastDragVelocity = CGVector(dx: mouse.x - lastDragLocation.x, dy: mouse.y - lastDragLocation.y)
         }
         lastDragLocation = mouse
+        lastDragUpdate = Date()
         anchor = CGPoint(x: mouse.x + dragOffset.dx, y: mouse.y + dragOffset.dy)
         render(immediate: true)
     }
 
     func endDrag() {
-        choose(.thrown)
+        if shouldThrowFromDrag() {
+            choose(.thrown)
+        } else {
+            velocity = .zero
+            choose(.fall)
+        }
     }
 
     func holdPointer() {
@@ -825,7 +834,7 @@ private final class Mascot {
         if anchor.y <= ground {
             anchor.y = ground
             velocity = .zero
-            choose(.stand)
+            choose(.land)
         }
     }
 
@@ -840,7 +849,14 @@ private final class Mascot {
         if anchor.y <= ground {
             anchor.y = ground
             velocity = .zero
-            choose(.trip)
+            choose(.land)
+        }
+    }
+
+    private func stepLanding(in world: DesktopWorld) {
+        _ = settleOnGround(in: world)
+        if actionTick > currentClipDuration(defaultDuration: 18) {
+            choose(.stand)
         }
     }
 
@@ -869,6 +885,25 @@ private final class Mascot {
         }
 
         lookRight = velocity.dx > 0
+    }
+
+    private func shouldThrowFromDrag() -> Bool {
+        let age = Date().timeIntervalSince(lastDragUpdate)
+        guard age <= Motion.freshDragVelocityAge else {
+            return false
+        }
+
+        return hypot(lastDragVelocity.dx, lastDragVelocity.dy) >= Motion.throwReleaseSpeed
+    }
+
+    private func limitedThrowVelocity(_ rawVelocity: CGVector) -> CGVector {
+        let speed = hypot(rawVelocity.dx, rawVelocity.dy)
+        guard speed > Motion.throwVelocityLimit else {
+            return rawVelocity
+        }
+
+        let scale = Motion.throwVelocityLimit / speed
+        return CGVector(dx: rawVelocity.dx * scale, dy: rawVelocity.dy * scale)
     }
 
     @discardableResult
@@ -954,6 +989,8 @@ private final class Mascot {
             return imageSet.clip(named: "Dash", fallback: ["Run", "Walk"])
         case .fall, .thrown:
             return imageSet.clip(named: "Falling", fallback: ["Stand"])
+        case .land:
+            return imageSet.clip(named: "StandFromFloor", fallback: ["Bouncing", "Stand"])
         case .dragged, .holdPointer:
             return imageSet.clip(named: "Pinched", fallback: ["Resisting", "Falling", "Stand"])
         case .climbWall:
