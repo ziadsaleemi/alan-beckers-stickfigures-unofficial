@@ -2,11 +2,13 @@
 set -euo pipefail
 
 APP_NAME="Alan Beckers Stickfigures"
-BUNDLE_ID="com.skittlq.alanbeckersstickfigures.unofficial"
+BUNDLE_ID="${MACOS_BUNDLE_ID:-com.skittlq.alanbeckersstickfigures.unofficial}"
 MIN_SYSTEM_VERSION="13.0"
 APP_VERSION="${APP_VERSION:-1.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
+MACOS_CODESIGN_ENTITLEMENTS="${MACOS_CODESIGN_ENTITLEMENTS:-}"
+MACOS_PROVISIONING_PROFILE="${MACOS_PROVISIONING_PROFILE:-}"
 MACOS_REQUIRE_NOTARIZATION="${MACOS_REQUIRE_NOTARIZATION:-0}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -81,6 +83,14 @@ chmod +x "$APP_BINARY"
 cp -R "$ROOT_DIR/conf" "$STICKFIGURES_DIR/conf"
 cp -R "$ROOT_DIR/img" "$STICKFIGURES_DIR/img"
 
+if [ -n "$MACOS_PROVISIONING_PROFILE" ]; then
+  if [ ! -f "$MACOS_PROVISIONING_PROFILE" ]; then
+    echo "MACOS_PROVISIONING_PROFILE does not exist: $MACOS_PROVISIONING_PROFILE" >&2
+    exit 1
+  fi
+  cp "$MACOS_PROVISIONING_PROFILE" "$CONTENTS_DIR/embedded.provisionprofile"
+fi
+
 cat >"$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -141,6 +151,9 @@ if command -v codesign >/dev/null 2>&1; then
   CODESIGN_ARGS=(--force --deep --sign "$MACOS_CODESIGN_IDENTITY")
   if [ "$MACOS_CODESIGN_IDENTITY" != "-" ]; then
     CODESIGN_ARGS+=(--options runtime --timestamp)
+    if [ -n "$MACOS_CODESIGN_ENTITLEMENTS" ]; then
+      CODESIGN_ARGS+=(--entitlements "$MACOS_CODESIGN_ENTITLEMENTS")
+    fi
   fi
 
   codesign "${CODESIGN_ARGS[@]}" "$APP_BUNDLE" 2>&1 | sed '/replacing existing signature/d'

@@ -93,6 +93,42 @@ MACOS_NOTARY_KEY_PATH="/path/to/AuthKey_KEYID.p8" \
 
 Use a Team API key from App Store Connect for `notarytool`; individual keys do not work for release notarization. Apple ID notarization also works by replacing the API key variables with `MACOS_NOTARY_APPLE_ID`, `MACOS_NOTARY_TEAM_ID`, and `MACOS_NOTARY_PASSWORD` using an app-specific password.
 
+### Mac App Store Build
+
+The notarized DMG above is for direct distribution and should be kept. The Mac App Store is a separate distribution path: Apple requires a signed installer package uploaded to an existing App Store Connect macOS app record.
+
+Before building the App Store package:
+
+- Create the macOS app record in App Store Connect for bundle ID `com.skittlq.alanbeckersstickfigures.unofficial`.
+- Create/download a `Mac App Store Connect` provisioning profile for that explicit bundle ID.
+- Install an `Apple Distribution` or `3rd Party Mac Developer Application` signing identity.
+- Install a `3rd Party Mac Developer Installer` identity.
+
+Build the App Store package:
+
+```bash
+APP_VERSION=1.0.1 \
+BUILD_NUMBER=3 \
+MACOS_APP_STORE_CODESIGN_IDENTITY="Apple Distribution: Your Name (TEAMID)" \
+MACOS_APP_STORE_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Name (TEAMID)" \
+MACOS_APP_STORE_PROVISIONING_PROFILE="/path/to/profile.provisionprofile" \
+./script/package_macos_app_store.sh
+```
+
+The package is written to `dist/Alan-Beckers-Stickfigures-Mac-App-Store.pkg`.
+
+After App Store Connect creates the app and shows its numeric Apple ID, upload the package:
+
+```bash
+MACOS_APP_STORE_APPLE_ID="1234567890" \
+MACOS_APP_STORE_API_KEY_ID="KEYID" \
+MACOS_APP_STORE_API_ISSUER_ID="ISSUER-UUID" \
+MACOS_APP_STORE_API_KEY_PATH="/path/to/AuthKey_KEYID.p8" \
+./script/upload_macos_app_store.sh
+```
+
+Apple review may still require product-page metadata, screenshots, a privacy policy URL, and approval for the app's desktop overlay/window-awareness behavior.
+
 ### Windows Development Build
 
 Build the Windows installer on Windows with JDK 17+ and WiX Toolset installed:
