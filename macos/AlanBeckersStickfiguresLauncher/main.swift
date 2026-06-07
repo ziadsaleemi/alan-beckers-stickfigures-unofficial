@@ -109,7 +109,7 @@ private final class ActionXMLParser: NSObject, XMLParserDelegate {
             currentActionName = attributeDict["Name"]
             currentFrames = []
         case "Animation":
-            insideAnimation = currentActionName != nil && currentFrames.isEmpty
+            insideAnimation = currentActionName != nil && (currentFrames.isEmpty || currentActionName == "Pinched")
         case "Pose" where insideAnimation:
             guard let imageName = attributeDict["Image"] else {
                 return
@@ -591,7 +591,6 @@ private final class Mascot {
     var targetX: CGFloat?
     var targetY: CGFloat?
     var velocity = CGVector(dx: 0, dy: 0)
-    var dragOffset = CGVector(dx: 0, dy: 0)
     var lastDragLocation: CGPoint?
     var lastDragVelocity = CGVector(dx: 0, dy: 0)
     var lastDragUpdate = Date.distantPast
@@ -651,7 +650,7 @@ private final class Mascot {
         switch action {
         case .holdPointer:
             let mouse = NSEvent.mouseLocation
-            anchor = CGPoint(x: mouse.x + dragOffset.dx, y: mouse.y + dragOffset.dy)
+            anchor = anchorForPointer(mouse)
         case .dragged:
             break
         case .thrown:
@@ -697,11 +696,12 @@ private final class Mascot {
     }
 
     func beginDrag(at mouse: CGPoint) {
-        dragOffset = CGVector(dx: anchor.x - mouse.x, dy: anchor.y - mouse.y)
         lastDragLocation = mouse
         lastDragVelocity = .zero
         lastDragUpdate = Date()
         choose(.dragged)
+        anchor = anchorForPointer(mouse)
+        render(immediate: true)
     }
 
     func drag(to mouse: CGPoint) {
@@ -710,7 +710,7 @@ private final class Mascot {
         }
         lastDragLocation = mouse
         lastDragUpdate = Date()
-        anchor = CGPoint(x: mouse.x + dragOffset.dx, y: mouse.y + dragOffset.dy)
+        anchor = anchorForPointer(mouse)
         render(immediate: true)
     }
 
@@ -725,11 +725,13 @@ private final class Mascot {
 
     func holdPointer() {
         let mouse = NSEvent.mouseLocation
-        dragOffset = CGVector(dx: anchor.x - mouse.x, dy: anchor.y - mouse.y)
         choose(.holdPointer)
+        anchor = anchorForPointer(mouse)
+        render(immediate: true)
     }
 
     func releasePointer() {
+        velocity = .zero
         choose(.fall)
     }
 
@@ -904,6 +906,26 @@ private final class Mascot {
 
         let scale = Motion.throwVelocityLimit / speed
         return CGVector(dx: rawVelocity.dx * scale, dy: rawVelocity.dy * scale)
+    }
+
+    private func anchorForPointer(_ mouse: CGPoint) -> CGPoint {
+        let offset = pointerGrabAnchorOffset()
+        return CGPoint(x: mouse.x + offset.dx, y: mouse.y + offset.dy)
+    }
+
+    private func pointerGrabAnchorOffset() -> CGVector {
+        guard let frame = currentFrame(),
+              let image = imageSet.image(named: frame.imageName) else {
+            return CGVector(dx: 0, dy: -116)
+        }
+
+        let size = image.size
+        let anchorX = lookRight ? size.width - frame.anchor.x : frame.anchor.x
+        let anchorInWindow = CGPoint(x: anchorX, y: size.height - frame.anchor.y)
+        let grabX = lookRight ? size.width - frame.anchor.x : frame.anchor.x
+        let grabYFromTop = min(6, max(0, size.height * 0.05))
+        let grabInWindow = CGPoint(x: grabX, y: size.height - grabYFromTop)
+        return CGVector(dx: anchorInWindow.x - grabInWindow.x, dy: anchorInWindow.y - grabInWindow.y)
     }
 
     @discardableResult
