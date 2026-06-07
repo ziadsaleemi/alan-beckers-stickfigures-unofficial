@@ -88,7 +88,10 @@ trading places, building/inspecting together, victim trap/lasso beats, paired
 patrols, playful chases, short sparring/fighting beats, teasing, observing, and
 shared celebrations. These actions have generated role-play sprite frames under
 each `img/<Stickfigure>/` directory and generated `Role...` clips in each
-`actions.xml`. Close-contact scenes first move the characters together, then
+`actions.xml`. The generated frames reuse the source sprite family proportions:
+filled-head characters keep their shorter, thinner limbs, while
+Orange/TCO/TDL/victim keep their taller ring-head proportions and original
+colors. Close-contact scenes first move the characters together, then
 play the paired action so the result reads as an interaction instead of two
 unrelated idle choices.
 

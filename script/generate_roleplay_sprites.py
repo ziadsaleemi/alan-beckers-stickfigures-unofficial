@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -17,6 +18,7 @@ W = SIZE * SCALE
 ANCHOR = "64,128"
 MARKER_BEGIN = "\t\t<!-- BEGIN ABS_ROLEPLAY_SPRITES -->"
 MARKER_END = "\t\t<!-- END ABS_ROLEPLAY_SPRITES -->"
+FILLED_HEAD_CHARACTERS = {"Blue", "Green", "Purple", "Red", "Yellow"}
 
 
 CLIPS: dict[str, list[str]] = {
@@ -40,23 +42,86 @@ CLIPS: dict[str, list[str]] = {
 }
 
 
+@dataclass(frozen=True)
+class CharacterStyle:
+    character: str
+    color: tuple[int, int, int, int]
+    center_x: float
+    x_scale: float
+    limb_width: int
+    head_radius: float
+    head_width: int
+    head_y_shift: float
+    filled_head: bool
+    hand_cuffs: bool = False
+
+
+ACTIVE_STYLE: CharacterStyle | None = None
+
+
 def scaled(points: list[tuple[float, float]]) -> list[tuple[int, int]]:
-    return [(int(x * SCALE), int(y * SCALE)) for x, y in points]
+    return [(int(x * SCALE), int(y * SCALE)) for x, y in transformed(points)]
+
+
+def transformed(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    return [transform_point(point) for point in points]
+
+
+def transform_point(point: tuple[float, float], *, head: bool = False) -> tuple[float, float]:
+    if ACTIVE_STYLE is None:
+        return point
+
+    x, y = point
+    return (
+        ACTIVE_STYLE.center_x + ((x - 64) * ACTIVE_STYLE.x_scale),
+        y + (ACTIVE_STYLE.head_y_shift if head else 0),
+    )
+
+
+def scaled_width(width: int) -> int:
+    if ACTIVE_STYLE is None:
+        return width * SCALE
+    adjusted = ACTIVE_STYLE.limb_width if width == 7 else max(1, round(width * ACTIVE_STYLE.limb_width / 7))
+    return adjusted * SCALE
 
 
 def color_for(directory: Path) -> tuple[int, int, int, int]:
     stand = Image.open(directory / "stand01.png").convert("RGBA")
-    pixels = [
-        (r, g, b, a)
-        for r, g, b, a in stand.getdata()
-        if a > 24 and max(r, g, b) - min(r, g, b) > 16
-    ]
+    pixels = [(r, g, b, a) for r, g, b, a in stand.getdata() if a > 24]
     if not pixels:
         return (255, 255, 255, 255)
 
-    quantized = Counter((r // 8 * 8, g // 8 * 8, b // 8 * 8) for r, g, b, _ in pixels)
-    r, g, b = quantized.most_common(1)[0][0]
-    return (min(255, r + 4), min(255, g + 4), min(255, b + 4), 255)
+    r, g, b = Counter((r, g, b) for r, g, b, _ in pixels).most_common(1)[0][0]
+    return (r, g, b, 255)
+
+
+def style_for(character: str, directory: Path) -> CharacterStyle:
+    color = color_for(directory)
+    if character in FILLED_HEAD_CHARACTERS:
+        return CharacterStyle(
+            character=character,
+            color=color,
+            center_x=60,
+            x_scale=0.72,
+            limb_width=5,
+            head_radius=12,
+            head_width=5,
+            head_y_shift=0,
+            filled_head=True,
+        )
+
+    return CharacterStyle(
+        character=character,
+        color=color,
+        center_x=67 if character == "victim" else 58,
+        x_scale=0.84,
+        limb_width=6 if character != "victim" else 7,
+        head_radius=17,
+        head_width=6 if character != "victim" else 7,
+        head_y_shift=-6,
+        filled_head=False,
+        hand_cuffs=character == "TDL",
+    )
 
 
 def new_canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
@@ -65,26 +130,50 @@ def new_canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
 
 
 def line(draw: ImageDraw.ImageDraw, color: tuple[int, int, int, int], points: list[tuple[float, float]], width: int = 7) -> None:
-    draw.line(scaled(points), fill=color, width=width * SCALE, joint="curve")
-    radius = max(2, width // 2) * SCALE
+    draw.line(scaled(points), fill=color, width=scaled_width(width), joint="curve")
+    radius = max(2, scaled_width(width) // 2)
     for x, y in scaled(points):
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
 
 
 def circle(draw: ImageDraw.ImageDraw, color: tuple[int, int, int, int], center: tuple[float, float], radius: float, width: int = 7) -> None:
-    x, y = center
-    box = tuple(int(v * SCALE) for v in (x - radius, y - radius, x + radius, y + radius))
-    draw.ellipse(box, outline=color, width=width * SCALE)
+    is_head = width == 7 and radius == 16 and ACTIVE_STYLE is not None
+    x, y = transform_point(center, head=is_head)
+    draw_radius = ACTIVE_STYLE.head_radius if is_head else radius
+    draw_width = ACTIVE_STYLE.head_width if is_head else width
+    box = tuple(int(v * SCALE) for v in (x - draw_radius, y - draw_radius, x + draw_radius, y + draw_radius))
+    if is_head and ACTIVE_STYLE.filled_head:
+        draw.ellipse(box, fill=color)
+    else:
+        draw.ellipse(box, outline=color, width=draw_width * SCALE)
 
 
 def small_fill_circle(draw: ImageDraw.ImageDraw, color: tuple[int, int, int, int], center: tuple[float, float], radius: float) -> None:
-    x, y = center
+    x, y = transform_point(center)
+    if ACTIVE_STYLE is not None:
+        radius = max(1.0, radius * ACTIVE_STYLE.x_scale)
     box = tuple(int(v * SCALE) for v in (x - radius, y - radius, x + radius, y + radius))
     draw.ellipse(box, fill=color)
 
 
 def rect(draw: ImageDraw.ImageDraw, color: tuple[int, int, int, int], box: tuple[float, float, float, float], width: int = 4) -> None:
-    draw.rectangle(tuple(int(v * SCALE) for v in box), outline=color, width=width * SCALE)
+    x1, y1 = transform_point((box[0], box[1]))
+    x2, y2 = transform_point((box[2], box[3]))
+    draw.rectangle(
+        tuple(int(v * SCALE) for v in (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))),
+        outline=color,
+        width=scaled_width(width),
+    )
+
+
+def ellipse(draw: ImageDraw.ImageDraw, color: tuple[int, int, int, int], box: tuple[float, float, float, float], width: int = 4) -> None:
+    x1, y1 = transform_point((box[0], box[1]))
+    x2, y2 = transform_point((box[2], box[3]))
+    draw.ellipse(
+        tuple(int(v * SCALE) for v in (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))),
+        outline=color,
+        width=scaled_width(width),
+    )
 
 
 def base_stick(
@@ -109,9 +198,16 @@ def base_stick(
     line(draw, color, right_arm)
     line(draw, color, left_leg)
     line(draw, color, right_leg)
+    if ACTIVE_STYLE is not None and ACTIVE_STYLE.hand_cuffs:
+        for hand in (left_arm[-1], right_arm[-1]):
+            small_fill_circle(draw, (0, 0, 0, 255), hand, 4.5)
 
 
-def draw_role(role: str, frame: int, color: tuple[int, int, int, int], character: str) -> Image.Image:
+def draw_role(role: str, frame: int, style: CharacterStyle) -> Image.Image:
+    global ACTIVE_STYLE
+    previous_style = ACTIVE_STYLE
+    ACTIVE_STYLE = style
+    color = style.color
     image, draw = new_canvas()
     accent = (min(255, color[0] + 40), min(255, color[1] + 40), min(255, color[2] + 40), 220)
     dark = (max(0, color[0] - 40), max(0, color[1] - 40), max(0, color[2] - 40), 220)
@@ -276,7 +372,7 @@ def draw_role(role: str, frame: int, color: tuple[int, int, int, int], character
             left_leg=[(64, 105), (48, 126)],
             right_leg=[(64, 105), (84, 123)],
         )
-        draw.ellipse(tuple(int(v * SCALE) for v in (87, 29, 121, 63)), outline=accent, width=4 * SCALE)
+        ellipse(draw, accent, (87, 29, 121, 63), width=4)
         line(draw, accent, [(85, 51), (104, 75)], width=3)
     elif role == "RoleTrapReaction":
         base_stick(
@@ -288,7 +384,7 @@ def draw_role(role: str, frame: int, color: tuple[int, int, int, int], character
             left_leg=[(52, 108), (32, 122)],
             right_leg=[(52, 108), (75, 126)],
         )
-        draw.ellipse(tuple(int(v * SCALE) for v in (31, 30, 100, 108)), outline=accent, width=3 * SCALE)
+        ellipse(draw, accent, (31, 30, 100, 108), width=3)
     elif role == "RolePatrol":
         base_stick(
             draw, color,
@@ -303,7 +399,9 @@ def draw_role(role: str, frame: int, color: tuple[int, int, int, int], character
     else:
         base_stick(draw, color)
 
-    return image.resize((SIZE, SIZE), Image.Resampling.LANCZOS)
+    result = image.resize((SIZE, SIZE), Image.Resampling.LANCZOS)
+    ACTIVE_STYLE = previous_style
+    return result
 
 
 def action_block() -> str:
@@ -340,10 +438,10 @@ def update_actions_xml(path: Path) -> None:
 def main() -> None:
     for character in CHARACTERS:
         directory = IMG_ROOT / character
-        color = color_for(directory)
+        style = style_for(character, directory)
         for clip_name, frames in CLIPS.items():
             for idx, frame in enumerate(frames, start=1):
-                image = draw_role(clip_name, idx, color, character)
+                image = draw_role(clip_name, idx, style)
                 image.save(directory / frame)
         update_actions_xml(directory / "conf" / "actions.xml")
 
