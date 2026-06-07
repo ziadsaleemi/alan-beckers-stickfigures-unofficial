@@ -627,6 +627,7 @@ private final class Mascot {
             }
         case .fall:
             velocity.dy = min(velocity.dy, -2)
+            updateLookDirectionFromVelocity()
         case .stand, .sit:
             velocity = .zero
             nextDecisionTick = Int.random(in: 55...180)
@@ -816,6 +817,7 @@ private final class Mascot {
     private func stepFall(in world: DesktopWorld) {
         velocity.dy -= 0.65
         velocity.dx *= 0.98
+        updateLookDirectionFromVelocity()
         anchor.x += velocity.dx
         anchor.y += velocity.dy
 
@@ -830,6 +832,7 @@ private final class Mascot {
     private func stepThrown(in world: DesktopWorld) {
         velocity.dy -= 0.6
         velocity.dx *= 0.985
+        updateLookDirectionFromVelocity()
         anchor.x += velocity.dx
         anchor.y += velocity.dy
 
@@ -858,6 +861,14 @@ private final class Mascot {
         default:
             return Motion.walkSpeed
         }
+    }
+
+    private func updateLookDirectionFromVelocity() {
+        guard abs(velocity.dx) > 0.35 else {
+            return
+        }
+
+        lookRight = velocity.dx > 0
     }
 
     @discardableResult
@@ -944,7 +955,7 @@ private final class Mascot {
         case .fall, .thrown:
             return imageSet.clip(named: "Falling", fallback: ["Stand"])
         case .dragged, .holdPointer:
-            return imageSet.clip(named: "Dragged", fallback: ["Stand"])
+            return imageSet.clip(named: "Pinched", fallback: ["Resisting", "Falling", "Stand"])
         case .climbWall:
             return imageSet.clip(named: "ClimbWall", fallback: ["GrabWall"])
         case .climbCeiling:
