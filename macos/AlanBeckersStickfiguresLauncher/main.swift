@@ -1362,6 +1362,9 @@ private final class MascotController: NSObject {
 }
 
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private static let appDisplayName = "Alan Beckers Stickfigures"
+    private static let appSubtitle = "Your Own Stickman Companions!"
+
     private let controller = MascotController()
     private var statusItem: NSStatusItem?
     private var statusMenu = NSMenu()
@@ -1369,6 +1372,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var statusValueLabel: NSTextField?
     private var resourcePathLabel: NSTextField?
     private var startStopButton: NSButton?
+    private var restartButton: NSButton?
     private var autoStartCheckbox: NSButton?
     private var keepAliveCheckbox: NSButton?
     private var imageSetCheckboxes: [String: NSButton] = [:]
@@ -1412,6 +1416,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         false
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        appendLogLine("App reopen requested.")
+        showSettingsWindow()
+        return true
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         controller.stop()
         appendLogLine("Native Swift app exited.")
@@ -1434,7 +1444,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func configureStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem?.button?.title = "ABS"
-        statusItem?.button?.toolTip = "Alan Beckers Stickfigures"
+        statusItem?.button?.toolTip = Self.appDisplayName
         statusItem?.menu = statusMenu
         updateStatusMenu()
     }
@@ -1442,9 +1452,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func updateStatusMenu() {
         statusMenu.removeAllItems()
 
-        let titleItem = NSMenuItem(title: "Alan Beckers Stickfigures", action: nil, keyEquivalent: "")
+        let titleItem = NSMenuItem(title: Self.appDisplayName, action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         statusMenu.addItem(titleItem)
+
+        let subtitleItem = NSMenuItem(title: Self.appSubtitle, action: nil, keyEquivalent: "")
+        subtitleItem.isEnabled = false
+        statusMenu.addItem(subtitleItem)
         statusMenu.addItem(.separator())
 
         let toggleItem = NSMenuItem(
@@ -1462,11 +1476,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
         statusMenu.addItem(.separator())
 
+        let chooseItem = NSMenuItem(title: "Choose Stickfigures...", action: #selector(showSettingsWindow), keyEquivalent: "")
+        chooseItem.target = self
+        statusMenu.addItem(chooseItem)
+
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettingsWindow), keyEquivalent: ",")
         settingsItem.target = self
         statusMenu.addItem(settingsItem)
 
-        let logItem = NSMenuItem(title: "Open Log", action: #selector(openLog), keyEquivalent: "")
+        let logItem = NSMenuItem(title: "Open Logs", action: #selector(openLog), keyEquivalent: "")
         logItem.target = self
         statusMenu.addItem(logItem)
 
@@ -1487,85 +1505,240 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         updateStatus()
         settingsWindow?.makeKeyAndOrderFront(nil)
+        settingsWindow?.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
     }
 
     private func buildSettingsWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 620),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Alan Beckers Stickfigures"
+        window.title = Self.appDisplayName
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.collectionBehavior = [.moveToActiveSpace]
         window.center()
         window.delegate = self
 
-        let titleLabel = NSTextField(labelWithString: "Alan Beckers Stickfigures")
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 20)
+        let titleLabel = makeLabel(Self.appDisplayName, font: NSFont.boldSystemFont(ofSize: 24))
+        let subtitleLabel = makeLabel(Self.appSubtitle, font: NSFont.systemFont(ofSize: 14), color: .secondaryLabelColor)
 
-        let subtitleLabel = NSTextField(labelWithString: "Native macOS desktop stickfigures.")
-        subtitleLabel.textColor = .secondaryLabelColor
+        let headerStack = NSStackView(views: [titleLabel, subtitleLabel])
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 4
 
-        statusValueLabel = NSTextField(labelWithString: "")
-        statusValueLabel?.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-
-        resourcePathLabel = NSTextField(wrappingLabelWithString: "")
-        resourcePathLabel?.textColor = .secondaryLabelColor
-        resourcePathLabel?.font = NSFont.systemFont(ofSize: 12)
-
+        statusValueLabel = makeStatusPill()
         startStopButton = NSButton(title: "", target: self, action: #selector(toggleStickfigures))
-        let restartButton = NSButton(title: "Restart", target: self, action: #selector(restartStickfigures))
-        let logButton = NSButton(title: "Open Log", target: self, action: #selector(openLog))
-        let finderButton = NSButton(title: "Show App in Finder", target: self, action: #selector(showAppInFinder))
+        configureButton(startStopButton!, emphasized: true)
+        startStopButton?.widthAnchor.constraint(greaterThanOrEqualToConstant: 112).isActive = true
 
-        autoStartCheckbox = NSButton(
-            checkboxWithTitle: "Turn on stickfigures when this app opens",
-            target: self,
-            action: #selector(autoStartChanged)
-        )
-        keepAliveCheckbox = NSButton(
-            checkboxWithTitle: "Restart stickfigures if they stop",
-            target: self,
-            action: #selector(keepAliveChanged)
-        )
+        let statusControls = NSStackView(views: [statusValueLabel!, startStopButton!])
+        statusControls.orientation = .horizontal
+        statusControls.alignment = .centerY
+        statusControls.spacing = 10
 
-        let buttonRow = NSStackView(views: [startStopButton!, restartButton, logButton, finderButton])
-        buttonRow.orientation = .horizontal
-        buttonRow.spacing = 8
-        buttonRow.alignment = .centerY
-
-        let enabledLabel = NSTextField(labelWithString: "Enabled stickfigures")
-        enabledLabel.font = NSFont.boldSystemFont(ofSize: 13)
-
-        let stack = NSStackView(views: [
-            titleLabel,
-            subtitleLabel,
-            statusValueLabel!,
-            resourcePathLabel!,
-            buttonRow,
-            autoStartCheckbox!,
-            keepAliveCheckbox!,
-            enabledLabel,
-            buildImageSetGrid()
+        let statusPanel = makePanel([
+            makeControlRow(
+                title: "Stickfigures",
+                detail: "Show desktop companions across your connected screens.",
+                control: statusControls
+            )
         ])
+
+        autoStartCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(autoStartChanged))
+        keepAliveCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(keepAliveChanged))
+
+        let stayInMenuBarCheckbox = lockedCheckbox()
+        let dockAndWindowCheckbox = lockedCheckbox()
+        let holdPointerCheckbox = lockedCheckbox()
+
+        let preferencesPanel = makeSection(
+            title: "Behavior",
+            subtitle: "Keep the desktop rules predictable on macOS and Windows.",
+            rows: [
+                makeControlRow(
+                    title: "Start at login",
+                    detail: "Turn on stickfigures when this app opens.",
+                    control: autoStartCheckbox!
+                ),
+                makeControlRow(
+                    title: "Stay in menu bar",
+                    detail: "Keep the ABS controls available from the top bar.",
+                    control: stayInMenuBarCheckbox
+                ),
+                makeControlRow(
+                    title: "Respect Dock and windows",
+                    detail: "Use visible Dock edges and normal windows as surfaces.",
+                    control: dockAndWindowCheckbox
+                ),
+                makeControlRow(
+                    title: "Hold pointer from right click",
+                    detail: "Right click a stickfigure to make it hold the mouse pointer.",
+                    control: holdPointerCheckbox
+                ),
+                makeControlRow(
+                    title: "Restart if stopped",
+                    detail: "Bring the stickfigures back if the engine exits unexpectedly.",
+                    control: keepAliveCheckbox!
+                )
+            ]
+        )
+
+        let charactersPanel = makeSection(
+            title: "Enabled Stickfigures",
+            subtitle: "Only checked characters appear on the desktop.",
+            rows: [buildImageSetGrid()]
+        )
+
+        restartButton = NSButton(title: "Restart", target: self, action: #selector(restartStickfigures))
+        configureButton(restartButton!)
+        let logButton = NSButton(title: "Open Logs", target: self, action: #selector(openLog))
+        configureButton(logButton)
+        let finderButton = NSButton(title: "Show App in Finder", target: self, action: #selector(showAppInFinder))
+        configureButton(finderButton)
+
+        let buttonRow = NSStackView(views: [restartButton!, logButton, finderButton])
+        buttonRow.orientation = .horizontal
+        buttonRow.alignment = .centerY
+        buttonRow.distribution = .gravityAreas
+        buttonRow.spacing = 8
+
+        resourcePathLabel = makeLabel("", font: NSFont.systemFont(ofSize: 11), color: .tertiaryLabelColor)
+
+        let stack = NSStackView(views: [headerStack, statusPanel, preferencesPanel, charactersPanel, buttonRow, resourcePathLabel!])
         stack.orientation = .vertical
-        stack.alignment = .leading
+        stack.alignment = .width
         stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let contentView = NSView()
+        contentView.wantsLayer = true
+        contentView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         contentView.addSubview(stack)
+        resourcePathLabel?.lineBreakMode = .byTruncatingMiddle
+
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor)
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -22),
+            headerStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            statusPanel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            preferencesPanel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            charactersPanel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            resourcePathLabel!.widthAnchor.constraint(equalTo: stack.widthAnchor)
         ])
 
         window.contentView = contentView
         return window
+    }
+
+    private func makeSection(title: String, subtitle: String, rows: [NSView]) -> NSView {
+        let titleLabel = makeLabel(title, font: NSFont.boldSystemFont(ofSize: 14))
+        let subtitleLabel = makeLabel(subtitle, font: NSFont.systemFont(ofSize: 12), color: .secondaryLabelColor)
+
+        let headerStack = NSStackView(views: [titleLabel, subtitleLabel])
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 2
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let headerRow = NSStackView(views: [headerStack, spacer])
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .top
+        headerRow.spacing = 8
+
+        return makePanel([headerRow] + rows)
+    }
+
+    private func makePanel(_ rows: [NSView]) -> NSView {
+        let stack = NSStackView(views: rows)
+        stack.orientation = .vertical
+        stack.alignment = .width
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let panel = NSView()
+        panel.wantsLayer = true
+        panel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        panel.layer?.cornerRadius = 8
+        panel.layer?.borderWidth = 1
+        panel.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        panel.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: panel.topAnchor, constant: 14),
+            stack.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -14)
+        ])
+
+        return panel
+    }
+
+    private func makeControlRow(title: String, detail: String, control: NSView) -> NSView {
+        let titleLabel = makeLabel(title, font: NSFont.systemFont(ofSize: 13, weight: .semibold))
+        let detailLabel = makeLabel(detail, font: NSFont.systemFont(ofSize: 12), color: .secondaryLabelColor)
+        detailLabel.maximumNumberOfLines = 2
+
+        let textStack = NSStackView(views: [titleLabel, detailLabel])
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 2
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        control.setContentHuggingPriority(.required, for: .horizontal)
+
+        let row = NSStackView(views: [textStack, spacer, control])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 12
+        return row
+    }
+
+    private func makeLabel(_ text: String, font: NSFont, color: NSColor = .labelColor) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = font
+        label.textColor = color
+        label.lineBreakMode = .byWordWrapping
+        return label
+    }
+
+    private func makeStatusPill() -> NSTextField {
+        let label = NSTextField(labelWithString: "")
+        label.alignment = .center
+        label.font = NSFont.boldSystemFont(ofSize: 12)
+        label.wantsLayer = true
+        label.layer?.cornerRadius = 10
+        label.layer?.masksToBounds = true
+        label.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        label.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        return label
+    }
+
+    private func configureButton(_ button: NSButton, emphasized: Bool = false) {
+        button.bezelStyle = .rounded
+        button.controlSize = .regular
+        button.font = NSFont.systemFont(ofSize: 13, weight: emphasized ? .semibold : .regular)
+        if emphasized {
+            button.bezelColor = .systemOrange
+        }
+    }
+
+    private func lockedCheckbox() -> NSButton {
+        let checkbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+        checkbox.state = .on
+        checkbox.isEnabled = false
+        return checkbox
     }
 
     private func buildImageSetGrid() -> NSStackView {
@@ -1573,7 +1746,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let container = NSStackView()
         container.orientation = .vertical
         container.alignment = .leading
-        container.spacing = 8
+        container.spacing = 10
 
         let names = availableImageSetNames()
         if names.isEmpty {
@@ -1597,12 +1770,47 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
             let checkbox = NSButton(checkboxWithTitle: name, target: self, action: #selector(imageSetChanged(_:)))
             checkbox.state = selectedNames.contains(name) ? .on : .off
-            checkbox.widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
-            row?.addArrangedSubview(checkbox)
+            checkbox.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+            let swatch = NSView()
+            swatch.wantsLayer = true
+            swatch.layer?.backgroundColor = colorForImageSet(name).cgColor
+            swatch.layer?.cornerRadius = 5
+            swatch.widthAnchor.constraint(equalToConstant: 10).isActive = true
+            swatch.heightAnchor.constraint(equalToConstant: 10).isActive = true
+
+            let item = NSStackView(views: [swatch, checkbox])
+            item.orientation = .horizontal
+            item.alignment = .centerY
+            item.spacing = 7
+            item.widthAnchor.constraint(greaterThanOrEqualToConstant: 170).isActive = true
+
+            row?.addArrangedSubview(item)
             imageSetCheckboxes[name] = checkbox
         }
 
         return container
+    }
+
+    private func colorForImageSet(_ name: String) -> NSColor {
+        switch name.lowercased() {
+        case "blue":
+            return .systemBlue
+        case "green", "victim":
+            return .systemGreen
+        case "orange":
+            return .systemOrange
+        case "purple":
+            return .systemPurple
+        case "red", "tdl":
+            return .systemRed
+        case "yellow":
+            return .systemYellow
+        case "tco":
+            return .labelColor
+        default:
+            return .secondaryLabelColor
+        }
     }
 
     private func availableImageSetNames() -> [String] {
@@ -1666,9 +1874,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     private func updateStatus() {
-        statusValueLabel?.stringValue = controller.isRunning ? "Status: on" : "Status: off"
-        resourcePathLabel?.stringValue = "Assets: \(resourcesURL.path)"
+        statusValueLabel?.stringValue = controller.isRunning ? "On" : "Off"
+        statusValueLabel?.textColor = .white
+        statusValueLabel?.layer?.backgroundColor = (controller.isRunning ? NSColor.systemGreen : NSColor.systemRed).cgColor
+        resourcePathLabel?.stringValue = "Assets loaded from \(resourcesURL.path)"
         startStopButton?.title = controller.isRunning ? "Turn Off" : "Turn On"
+        restartButton?.isEnabled = controller.isRunning
         autoStartCheckbox?.state = UserDefaults.standard.bool(forKey: DefaultsKey.autoStart) ? .on : .off
         keepAliveCheckbox?.state = UserDefaults.standard.bool(forKey: DefaultsKey.keepAlive) ? .on : .off
         let selectedNames = Set(selectedImageSetNames())

@@ -58,4 +58,10 @@ COPYFILE_DISABLE=1 productbuild \
   "$PKG_PATH"
 
 pkgutil --check-signature "$PKG_PATH"
+cat <<'NOTICE'
+Note: this Mac App Store package is for App Store Connect upload only.
+It is not a local test installer; macOS may refuse to launch the installed app
+outside the App Store provisioning/receipt flow. Use script/package_macos.sh for
+a locally runnable direct-download DMG.
+NOTICE
 echo "$PKG_PATH"

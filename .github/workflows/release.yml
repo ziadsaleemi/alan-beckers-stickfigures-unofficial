@@ -126,6 +126,11 @@ jobs:
 
       - name: Build EXE installer
         shell: pwsh
+        env:
+          WINDOWS_REQUIRE_SIGNING: "1"
+          WINDOWS_CODESIGN_PFX_B64: ${{ secrets.WINDOWS_CODESIGN_PFX_B64 }}
+          WINDOWS_CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          WINDOWS_CODESIGN_TIMESTAMP_URL: ${{ vars.WINDOWS_CODESIGN_TIMESTAMP_URL }}
         run: |
           $tag = "${{ github.ref_name }}"
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
@@ -136,6 +141,15 @@ jobs:
             $version = "1.0.0"
           }
           ./script/package_windows.ps1 -Version $version
+
+      - name: Inspect Windows signature
+        shell: pwsh
+        run: |
+          $signature = Get-AuthenticodeSignature "dist/Alan-Beckers-Stickfigures-Windows.exe"
+          $signature | Format-List
+          if ($signature.Status -ne "Valid") {
+            throw "Windows installer signature is not valid: $($signature.Status)"
+          }
 
       - name: Upload Windows EXE artifact
         uses: actions/upload-artifact@v4

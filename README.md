@@ -116,6 +116,11 @@ MACOS_APP_STORE_PROVISIONING_PROFILE="/path/to/profile.provisionprofile" \
 ```
 
 The package is written to `dist/Alan-Beckers-Stickfigures-Mac-App-Store.pkg`.
+This package is for App Store Connect upload only. Do not use it as a local
+test installer: macOS can kill the app at launch with "no eligible provisioning
+profiles found" until the app comes through the App Store/TestFlight flow. Use
+the notarized DMG from `./script/package_macos.sh` for local user testing and
+direct downloads.
 
 After App Store Connect creates the app and shows its numeric Apple ID, upload the package:
 
@@ -138,6 +143,20 @@ Build the Windows installer on Windows with JDK 17+ and WiX Toolset installed:
 ```
 
 The installer is written to `dist/Alan-Beckers-Stickfigures-Windows.exe`.
+The package script includes the repository `LICENSE` in the installer when it is
+present. That license text is not the same thing as Windows trust: Microsoft
+Defender SmartScreen warnings are controlled by Authenticode signing and app /
+publisher reputation, not by whether the installer has a license page.
+
+For a public Windows release, sign the installer with a trusted code-signing
+certificate:
+
+```powershell
+$env:WINDOWS_REQUIRE_SIGNING = "1"
+$env:WINDOWS_CODESIGN_PFX_PATH = "C:\path\to\CodeSigningCertificate.pfx"
+$env:WINDOWS_CODESIGN_PFX_PASSWORD = "certificate-password"
+.\script\package_windows.ps1 -Version 1.0.1
+```
 
 ### GitHub Releases
 
@@ -157,6 +176,18 @@ macOS release builds require these GitHub Actions secrets before tagging:
 - Team API-key notarization: `MACOS_NOTARY_KEY`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`
 - Or Apple ID notarization: `MACOS_NOTARY_APPLE_ID`, `MACOS_NOTARY_TEAM_ID`, `MACOS_NOTARY_PASSWORD`
 
+Windows release builds require these GitHub Actions secrets before tagging:
+
+- `WINDOWS_CODESIGN_PFX_B64`: base64 of the exported Windows code-signing `.pfx`
+- `WINDOWS_CODESIGN_PFX_PASSWORD`: password for that `.pfx`
+- Optional repository variable `WINDOWS_CODESIGN_TIMESTAMP_URL`: RFC 3161 timestamp server URL; defaults to `http://timestamp.digicert.com`
+
+The release workflow fails if the Windows installer is not signed and verified.
+Signing removes the "Unknown publisher" problem and lets SmartScreen reputation
+build against the publisher certificate. New apps or newly issued certificates
+can still see reputation warnings until Microsoft sees enough clean downloads
+and executions.
+
 To add the certificate and API-key secrets from macOS:
 
 ```bash
@@ -166,6 +197,14 @@ gh secret set MACOS_CODESIGN_IDENTITY
 gh secret set MACOS_NOTARY_KEY < /path/to/AuthKey_KEYID.p8
 gh secret set MACOS_NOTARY_KEY_ID
 gh secret set MACOS_NOTARY_ISSUER_ID
+```
+
+To add the Windows signing certificate secret from Windows PowerShell:
+
+```powershell
+$pfx = [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\CodeSigningCertificate.pfx"))
+gh secret set WINDOWS_CODESIGN_PFX_B64 --body $pfx
+gh secret set WINDOWS_CODESIGN_PFX_PASSWORD
 ```
 
 After those secrets exist, create the next release by pushing a tag:
