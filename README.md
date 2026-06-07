@@ -76,11 +76,19 @@ The app filters out embedding-only Ollama models because they cannot answer
 chat/action requests. AI behavior is constrained to sprite-backed actions each
 character actually supports, including common actions such as walk, run, dash,
 trip, dance, sit poses, sprawl, chase mouse, and victim-specific cursor/lasso
-actions when those sprites are present. It also creates dynamic two-character
-composite interactions such as playful chases, short sparring/fighting beats,
-teasing, observing, and shared celebrations. These interactions are built from
-the shipped sprites and are biased by story relationships, such as TCO/TDL
-rivalry, victim's suspicious behavior, and the color gang's playfulness.
+actions when those sprites are present. A built-in story director turns those
+actions into spaced-out role-play beats instead of constantly firing random AI
+actions. Scenes include color-gang warmups, playful chases, TCO/TDL rivalry,
+victim schemes, watch-and-react moments, celebrations, and quiet resets.
+
+The role-play system also creates dynamic two-character composite interactions
+such as follow-the-leader, copycat poses, guarding/watching, ambush/prank beats,
+playful chases, short sparring/fighting beats, teasing, observing, and shared
+celebrations. These interactions are built from the shipped sprites and are
+biased by story relationships, such as TCO/TDL rivalry, victim's suspicious
+behavior, and the color gang's playfulness. While a story beat is active,
+per-character model suggestions are paused; between scenes, one-off suggestions
+are throttled so the desktop behavior stays readable.
 
 If model loading hangs on `127.0.0.1:11434`, check for a port conflict:
 
