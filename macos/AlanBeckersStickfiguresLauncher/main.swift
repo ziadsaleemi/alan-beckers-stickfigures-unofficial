@@ -236,9 +236,9 @@ private final class ImageSet {
         switch name.lowercased() {
         case "tdl":
             return stillClip(
-                named: "Stand",
-                preferredImages: ["stand01.png"],
-                fallback: ["Falling"]
+                named: "Pinched",
+                preferredImages: ["pinch03.png"],
+                fallback: ["Stand"]
             )
         case "tco":
             return stillClip(
