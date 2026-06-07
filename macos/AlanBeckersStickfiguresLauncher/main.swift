@@ -2818,7 +2818,7 @@ private final class MascotController: NSObject {
     }
 
     private func updateStoryDirector() {
-        guard localAIEnabled, mascots.count >= 2 else {
+        guard mascots.count >= 2 else {
             if activeStoryBeat != nil {
                 finishStoryBeat()
             }
@@ -3742,11 +3742,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
         let panel = makeSection(
             title: "Local AI",
-            subtitle: "Use Ollama on this Mac for occasional behavior choices.",
+            subtitle: "Use Ollama for optional extra suggestions; built-in role-play works without it.",
             rows: [
                 makeControlRow(
-                    title: "Enable AI behavior",
-                    detail: "Keep animation local and optional.",
+                    title: "Enable Ollama suggestions",
+                    detail: "Story actions and generated sprites keep running when this is off.",
                     control: aiEnabledCheckbox!
                 ),
                 makeControlRow(
@@ -4015,7 +4015,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if let aiStatusLabel, aiStatusLabel.stringValue.isEmpty {
             aiStatusLabel.stringValue = aiEnabled
                 ? (hasModel ? "Local AI is ready." : "Load models to choose a chat model.")
-                : "Local AI is off."
+                : "Local AI is off. Built-in role-play is still active."
         }
     }
 
@@ -4062,7 +4062,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if sender.state == .on && (ollamaModelPopup?.numberOfItems ?? 0) == 0 {
             loadOllamaModels()
         } else {
-            aiStatusLabel?.stringValue = sender.state == .on ? "Local AI is ready." : "Local AI is off."
+            aiStatusLabel?.stringValue = sender.state == .on ? "Local AI is ready." : "Local AI is off. Built-in role-play is still active."
             updateAIControls()
         }
     }

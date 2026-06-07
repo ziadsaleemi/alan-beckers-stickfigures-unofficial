@@ -56,14 +56,20 @@ macOS launcher output is written to `~/Library/Logs/AlanBeckersStickfigures.log`
 - On macOS, enabled stickfigure sets are controlled from the native settings window and stored in macOS user defaults.
 - Windows keeps the original Shimeji-ee Java runtime and native window support. macOS now uses a native Swift/AppKit sprite engine for smoother transparent overlay windows.
 
-### Local AI Behavior
+### Role-Play And Local AI Behavior
 
-The native macOS app can optionally use a local Ollama model for dynamic
-behavior choices. This is disabled by default and does not send screenshots,
-window titles, or desktop content to the model. The app only sends the
-stickfigure name, current action, supported action names, nearby-character
-metadata, and sanitized desktop context such as wall distance, Dock/window
-surface type, and mouse distance.
+The native macOS app runs built-in role-play stories and generated interaction
+sprites by default. This does not require Local AI or Ollama. The story director
+turns supported actions into spaced-out role-play beats such as color-gang
+warmups, playful chases, TCO/TDL rivalry, victim schemes, watch-and-react
+moments, celebrations, and quiet resets.
+
+The app can optionally use a local Ollama model for extra dynamic behavior
+suggestions. This is disabled by default and does not send screenshots, window
+titles, or desktop content to the model. The app only sends the stickfigure
+name, current action, supported action names, nearby-character metadata, and
+sanitized desktop context such as wall distance, Dock/window surface type, and
+mouse distance.
 
 In **Settings**:
 
@@ -73,13 +79,10 @@ In **Settings**:
 4. Choose a chat-capable model such as `granite4.1:3b`.
 
 The app filters out embedding-only Ollama models because they cannot answer
-chat/action requests. AI behavior is constrained to sprite-backed actions each
-character actually supports, including common actions such as walk, run, dash,
-trip, dance, sit poses, sprawl, chase mouse, and victim-specific cursor/lasso
-actions when those sprites are present. A built-in story director turns those
-actions into spaced-out role-play beats instead of constantly firing random AI
-actions. Scenes include color-gang warmups, playful chases, TCO/TDL rivalry,
-victim schemes, watch-and-react moments, celebrations, and quiet resets.
+chat/action requests. AI suggestions are constrained to sprite-backed actions
+each character actually supports, including common actions such as walk, run,
+dash, trip, dance, sit poses, sprawl, chase mouse, and victim-specific
+cursor/lasso actions when those sprites are present.
 
 The role-play system also creates dynamic two-character composite interactions
 such as follow-the-leader, copycat poses, guarding/watching, ambush/prank beats,
