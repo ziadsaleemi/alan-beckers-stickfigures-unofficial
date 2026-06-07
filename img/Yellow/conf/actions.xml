@@ -529,6 +529,83 @@
 				<Pose Image="/role_patrol02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
 			</Animation>
 		</Action>
+
+		<Action Name="RoleTradePlace" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_trade_place01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_trade_place02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RolePlayChaseLead" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_play_chase_lead01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_play_chase_lead02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RolePlayChaseFollow" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_play_chase_follow01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_play_chase_follow02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleSparAttack" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_spar_attack01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_spar_attack02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleSparBlock" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_spar_block01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_spar_block02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleTease" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_tease01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tease02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleTeaseReaction" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_tease_reaction01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tease_reaction02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleCelebrate" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_celebrate01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_celebrate02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleObserve" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_observe01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_observe02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleRescueGive" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_rescue_give01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_rescue_give02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleRescueReceive" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_rescue_receive01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_rescue_receive02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
 		<!-- END ABS_ROLEPLAY_SPRITES -->
 	</ActionList>
 

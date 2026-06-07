@@ -39,6 +39,17 @@ CLIPS: dict[str, list[str]] = {
     "RoleVictimTrap": ["role_victim_trap01.png", "role_victim_trap02.png"],
     "RoleTrapReaction": ["role_trap_reaction01.png", "role_trap_reaction02.png"],
     "RolePatrol": ["role_patrol01.png", "role_patrol02.png"],
+    "RoleTradePlace": ["role_trade_place01.png", "role_trade_place02.png"],
+    "RolePlayChaseLead": ["role_play_chase_lead01.png", "role_play_chase_lead02.png"],
+    "RolePlayChaseFollow": ["role_play_chase_follow01.png", "role_play_chase_follow02.png"],
+    "RoleSparAttack": ["role_spar_attack01.png", "role_spar_attack02.png"],
+    "RoleSparBlock": ["role_spar_block01.png", "role_spar_block02.png"],
+    "RoleTease": ["role_tease01.png", "role_tease02.png"],
+    "RoleTeaseReaction": ["role_tease_reaction01.png", "role_tease_reaction02.png"],
+    "RoleCelebrate": ["role_celebrate01.png", "role_celebrate02.png"],
+    "RoleObserve": ["role_observe01.png", "role_observe02.png"],
+    "RoleRescueGive": ["role_rescue_give01.png", "role_rescue_give02.png"],
+    "RoleRescueReceive": ["role_rescue_receive01.png", "role_rescue_receive02.png"],
 }
 
 
@@ -396,6 +407,130 @@ def draw_role(role: str, frame: int, style: CharacterStyle) -> Image.Image:
             right_leg=[(60, 105), (82 - phase, 124)],
         )
         line(draw, accent, [(88, 40), (104, 40)], width=3)
+    elif role == "RoleTradePlace":
+        base_stick(
+            draw, color,
+            head=(58 + phase, 30),
+            body=[(59 + phase, 45), (64, 78), (61, 104)],
+            left_arm=[(61, 56), (43, 55 - phase)],
+            right_arm=[(62, 56), (83, 48 + phase), (93, 45 + phase)],
+            left_leg=[(61, 104), (44 + phase, 126)],
+            right_leg=[(61, 104), (82 - phase, 123)],
+        )
+        line(draw, accent, [(89, 39 + phase), (99, 35 + phase)], width=2)
+    elif role == "RolePlayChaseLead":
+        base_stick(
+            draw, color,
+            head=(53 + phase, 35),
+            body=[(57 + phase, 49), (69, 76), (75, 100)],
+            left_arm=[(64, 56), (44, 55), (35, 51)],
+            right_arm=[(65, 58), (87, 64)],
+            left_leg=[(75, 100), (55 + phase, 126)],
+            right_leg=[(75, 100), (99, 112)],
+        )
+        line(draw, accent, [(39, 42), (31, 38)], width=2)
+    elif role == "RolePlayChaseFollow":
+        base_stick(
+            draw, color,
+            head=(61 + phase, 35),
+            body=[(62 + phase, 49), (70, 77), (72, 102)],
+            left_arm=[(66, 58), (41, 64), (31, 67)],
+            right_arm=[(66, 58), (91, 56), (103, 53)],
+            left_leg=[(72, 102), (51 - phase, 126)],
+            right_leg=[(72, 102), (96, 119)],
+        )
+        line(draw, accent, [(98, 48), (108, 45)], width=2)
+    elif role == "RoleSparAttack":
+        base_stick(
+            draw, color,
+            head=(55 + phase, 32),
+            body=[(58 + phase, 47), (67, 77), (70, 103)],
+            left_arm=[(63, 57), (42, 66)],
+            right_arm=[(64, 57), (87, 48), (104, 43 + phase)],
+            left_leg=[(70, 103), (50, 126)],
+            right_leg=[(70, 103), (94, 118)],
+        )
+        line(draw, accent, [(104, 39 + phase), (113, 35 + phase)], width=2)
+    elif role == "RoleSparBlock":
+        base_stick(
+            draw, color,
+            head=(66, 32),
+            body=[(65, 47), (61, 78), (58, 105)],
+            left_arm=[(63, 58), (42, 50), (34, 43)],
+            right_arm=[(63, 58), (84, 50), (94, 42)],
+            left_leg=[(58, 105), (43, 126)],
+            right_leg=[(58, 105), (77, 125)],
+        )
+        line(draw, accent, [(37, 37), (91, 37)], width=2)
+    elif role == "RoleTease":
+        base_stick(
+            draw, color,
+            head=(63, 30),
+            body=[(63, 46), (63, 78), (62, 105)],
+            left_arm=[(63, 57), (42, 66)],
+            right_arm=[(64, 56), (88, 44 + phase), (103, 39 + phase)],
+            left_leg=[(62, 105), (46, 126)],
+            right_leg=[(62, 105), (80, 125)],
+        )
+        line(draw, accent, [(45, 24), (38, 18)], width=2)
+        line(draw, accent, [(49, 21), (46, 13)], width=2)
+    elif role == "RoleTeaseReaction":
+        base_stick(
+            draw, color,
+            head=(66 - phase, 31),
+            body=[(65 - phase, 47), (59, 80), (57, 105)],
+            left_arm=[(61, 59), (38, 47), (30, 40)],
+            right_arm=[(61, 59), (86, 47), (94, 40)],
+            left_leg=[(57, 105), (40, 124)],
+            right_leg=[(57, 105), (77, 126)],
+        )
+        line(draw, accent, [(96, 21), (103, 13)], width=2)
+        line(draw, accent, [(101, 29), (111, 26)], width=2)
+    elif role == "RoleCelebrate":
+        base_stick(
+            draw, color,
+            head=(64, 27 + phase),
+            body=[(64, 43 + phase), (64, 76), (64, 102)],
+            left_arm=[(64, 54), (45, 35 + phase), (39, 27 + phase)],
+            right_arm=[(64, 54), (83, 35 + phase), (89, 27 + phase)],
+            left_leg=[(64, 102), (48, 124)],
+            right_leg=[(64, 102), (80, 124)],
+        )
+        small_fill_circle(draw, accent, (36, 24 + phase), 3)
+        small_fill_circle(draw, accent, (92, 24 + phase), 3)
+    elif role == "RoleObserve":
+        base_stick(
+            draw, color,
+            head=(68 + phase, 35),
+            body=[(66 + phase, 50), (58, 80), (54, 104)],
+            left_arm=[(61, 61), (39, 70), (31, 78)],
+            right_arm=[(61, 61), (86, 55), (98, 53)],
+            left_leg=[(54, 104), (39, 124)],
+            right_leg=[(54, 104), (75, 123)],
+        )
+        line(draw, accent, [(96, 47), (109, 47)], width=2)
+    elif role == "RoleRescueGive":
+        base_stick(
+            draw, color,
+            head=(55, 32),
+            body=[(57, 48), (62, 80), (62, 105)],
+            left_arm=[(60, 59), (39, 68)],
+            right_arm=[(61, 59), (88, 69 + phase), (101, 74 + phase)],
+            left_leg=[(62, 105), (47, 126)],
+            right_leg=[(62, 105), (80, 124)],
+        )
+        small_fill_circle(draw, accent, (103, 75 + phase), 3)
+    elif role == "RoleRescueReceive":
+        base_stick(
+            draw, color,
+            head=(75, 39),
+            body=[(71, 54), (61, 84), (55, 106)],
+            left_arm=[(64, 66), (42, 78), (32, 84)],
+            right_arm=[(64, 66), (88, 68 + phase), (101, 74 + phase)],
+            left_leg=[(55, 106), (38, 124)],
+            right_leg=[(55, 106), (76, 126)],
+        )
+        small_fill_circle(draw, accent, (103, 75 + phase), 3)
     else:
         base_stick(draw, color)
 

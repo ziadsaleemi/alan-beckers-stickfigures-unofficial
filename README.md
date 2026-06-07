@@ -91,9 +91,11 @@ each `img/<Stickfigure>/` directory and generated `Role...` clips in each
 `actions.xml`. The generated frames reuse the source sprite family proportions:
 filled-head characters keep their shorter, thinner limbs, while
 Orange/TCO/TDL/victim keep their taller ring-head proportions and original
-colors. Close-contact scenes first move the characters together, then
-play the paired action so the result reads as an interaction instead of two
-unrelated idle choices.
+colors. The generated action set includes paired hug, tug, high-five, argument,
+comfort/rescue, trap, patrol, trade-place, chase, spar, tease/reaction,
+celebration, and observation poses. Close-contact scenes first move the
+characters together, then play the paired action so the result reads as an
+interaction instead of two unrelated idle choices.
 
 These interactions are built from the shipped sprites and are biased by story
 relationships, such as TCO/TDL rivalry, victim's suspicious behavior, and the

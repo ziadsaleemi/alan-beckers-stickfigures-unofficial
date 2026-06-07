@@ -876,7 +876,9 @@ private final class ImageSet {
                 || hasClip(named: "Stabbing")
                 || hasClip(named: "Stand")
         case .comfortPartner:
-            return hasClip(named: "RoleComfortGive")
+            return hasClip(named: "RoleRescueGive")
+                || hasClip(named: "RoleRescueReceive")
+                || hasClip(named: "RoleComfortGive")
                 || hasClip(named: "RoleComfortReceive")
                 || hasClip(named: "HuggingSolidAction")
                 || hasClip(named: "SitAndLookAtMouse")
@@ -885,7 +887,7 @@ private final class ImageSet {
         case .teamPose:
             return hasClip(named: "RoleTeamPose") || hasClip(named: "Stand") || hasClip(named: "Dance")
         case .tradePlaces:
-            return hasClip(named: "Run") || hasClip(named: "Walk")
+            return hasClip(named: "RoleTradePlace") || hasClip(named: "Run") || hasClip(named: "Walk")
         case .buildTogether:
             return hasClip(named: "RoleBuildTogether")
                 || hasClip(named: "SitAndLookAtMouse")
@@ -901,20 +903,29 @@ private final class ImageSet {
         case .patrolPair:
             return hasClip(named: "RolePatrol") || hasClip(named: "Walk") || hasClip(named: "Run")
         case .playChase:
-            return hasClip(named: "Run") || hasClip(named: "Walk")
+            return hasClip(named: "RolePlayChaseLead")
+                || hasClip(named: "RolePlayChaseFollow")
+                || hasClip(named: "Run")
+                || hasClip(named: "Walk")
         case .spar:
-            return hasClip(named: "Dash") || hasClip(named: "Run") || hasClip(named: "Tripping")
+            return hasClip(named: "RoleSparAttack")
+                || hasClip(named: "RoleSparBlock")
+                || hasClip(named: "Dash")
+                || hasClip(named: "Run")
+                || hasClip(named: "Tripping")
         case .tease:
-            return hasClip(named: "CursorSpite")
+            return hasClip(named: "RoleTease")
+                || hasClip(named: "RoleTeaseReaction")
+                || hasClip(named: "CursorSpite")
                 || hasClip(named: "CursorHate")
                 || hasClip(named: "Stabbing")
                 || hasClip(named: "Dance")
                 || hasClip(named: "Sprawl")
                 || hasClip(named: "Stand")
         case .celebrate:
-            return hasClip(named: "Dance") || hasClip(named: "SitAndLookUp") || hasClip(named: "Stand")
+            return hasClip(named: "RoleCelebrate") || hasClip(named: "Dance") || hasClip(named: "SitAndLookUp") || hasClip(named: "Stand")
         case .observePartner:
-            return hasClip(named: "SitAndLookAtMouse") || hasClip(named: "SitAndLookUp") || hasClip(named: "Stand")
+            return hasClip(named: "RoleObserve") || hasClip(named: "SitAndLookAtMouse") || hasClip(named: "SitAndLookUp") || hasClip(named: "Stand")
         case .fall, .dragged, .thrown, .land, .holdPointer, .climbCeiling, .grabWall, .grabCeiling:
             return false
         }
@@ -2482,13 +2493,13 @@ private final class Mascot {
             return imageSet.clip(named: "RoleArgument", fallback: ["CursorSpite", "CursorHate", "Stabbing", "Stand"])
         case .comfortPartner:
             if storyRole == 1 {
-                return imageSet.clip(named: "RoleComfortReceive", fallback: ["Sprawl", "SitAndLookAtMouse", "Sit", "Stand"])
+                return imageSet.clip(named: "RoleRescueReceive", fallback: ["RoleComfortReceive", "Sprawl", "SitAndLookAtMouse", "Sit", "Stand"])
             }
-            return imageSet.clip(named: "RoleComfortGive", fallback: ["HuggingSolidAction", "SitAndLookAtMouse", "SitAndLookUp", "Stand"])
+            return imageSet.clip(named: "RoleRescueGive", fallback: ["RoleComfortGive", "HuggingSolidAction", "SitAndLookAtMouse", "SitAndLookUp", "Stand"])
         case .teamPose:
             return imageSet.clip(named: "RoleTeamPose", fallback: ["Stand", "Dance", "SitAndLookAtMouse"])
         case .tradePlaces:
-            return imageSet.clip(named: "Run", fallback: ["Walk", "Dash", "Stand"])
+            return imageSet.clip(named: "RoleTradePlace", fallback: ["Run", "Walk", "Dash", "Stand"])
         case .buildTogether:
             return imageSet.clip(named: "RoleBuildTogether", fallback: ["SitAndLookAtMouse", "SitAndLookUp", "CursorHate", "Sit", "Stand"])
         case .victimTrap:
@@ -2499,15 +2510,24 @@ private final class Mascot {
         case .patrolPair:
             return imageSet.clip(named: "RolePatrol", fallback: ["Walk", "Run", "Stand"])
         case .playChase:
-            return imageSet.clip(named: "Run", fallback: ["Walk", "Dash", "Stand"])
+            if storyRole == 1 {
+                return imageSet.clip(named: "RolePlayChaseFollow", fallback: ["Run", "Walk", "Dash", "Stand"])
+            }
+            return imageSet.clip(named: "RolePlayChaseLead", fallback: ["Run", "Walk", "Dash", "Stand"])
         case .spar:
-            return imageSet.clip(named: "Dash", fallback: ["Run", "Walk", "Tripping", "Stand"])
+            if storyRole == 1 {
+                return imageSet.clip(named: "RoleSparBlock", fallback: ["Dash", "Run", "Walk", "Tripping", "Stand"])
+            }
+            return imageSet.clip(named: "RoleSparAttack", fallback: ["Dash", "Run", "Walk", "Tripping", "Stand"])
         case .tease:
-            return imageSet.clip(named: "CursorSpite", fallback: ["CursorHate", "Stabbing", "Dance", "Sprawl", "Stand"])
+            if storyRole == 1 {
+                return imageSet.clip(named: "RoleTeaseReaction", fallback: ["Sprawl", "CursorHate", "SitAndLookAtMouse", "Stand"])
+            }
+            return imageSet.clip(named: "RoleTease", fallback: ["CursorSpite", "CursorHate", "Stabbing", "Dance", "Sprawl", "Stand"])
         case .celebrate:
-            return imageSet.clip(named: "Dance", fallback: ["SitAndLookUp", "SitAndLookAtMouse", "Stand"])
+            return imageSet.clip(named: "RoleCelebrate", fallback: ["Dance", "SitAndLookUp", "SitAndLookAtMouse", "Stand"])
         case .observePartner:
-            return imageSet.clip(named: "SitAndLookAtMouse", fallback: ["SitAndLookUp", "Sit", "Stand"])
+            return imageSet.clip(named: "RoleObserve", fallback: ["SitAndLookAtMouse", "SitAndLookUp", "Sit", "Stand"])
         }
     }
 
@@ -3359,6 +3379,9 @@ private final class MascotController: NSObject {
     }
 
     private func teaseReaction(for mascot: Mascot) -> MascotAction {
+        if mascot.imageSet.supportsAIAction(.tease) {
+            return .tease
+        }
         if mascot.imageSet.supportsAIAction(.playChase), Bool.random() {
             return .playChase
         }
