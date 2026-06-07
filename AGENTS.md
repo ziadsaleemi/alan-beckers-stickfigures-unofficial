@@ -66,6 +66,7 @@ Use the smallest relevant skill set; do not load every skill by default.
 - Modern Java support is patched with bundled `lib/nashorn-core-15.7.jar` and ASM dependencies plus compatibility classes under `src/jdk/nashorn/api/scripting/`.
 - Use direct `java -jar AlansStickfigures.jar` only for basic Java/Windows runtime startup checks. Use `./script/build_and_run.sh --verify` for native macOS engine, menu-bar, settings, window-awareness, Dock, and sprite-rendering changes.
 - `script/build_macos_app.sh` compiles the Swift app, copies `conf` and `img` into `Contents/Resources/Stickfigures`, writes `LSUIElement=true`, and signs the generated app. It no longer embeds the Java runtime for macOS.
+- App artwork is generated from `repository-images/app-art-source.png`: macOS/App Store icon source is `repository-images/icon-xl.png`, README art is `repository-images/absu-logo.png` and `repository-images/key-art.png`, and Windows uses `img/icon.ico`.
 - Use `./script/package_macos.sh` to build `dist/Alan-Beckers-Stickfigures-macOS.dmg`.
 - Local macOS packages are ad-hoc signed by default. Public GitHub release DMGs require `MACOS_CODESIGN_IDENTITY` with a Developer ID Application identity plus Team API-key notarization credentials; do not tag a public macOS release until those GitHub secrets are configured.
 - The release workflow imports `MACOS_CERTIFICATE_P12`, signs with hardened runtime, notarizes the DMG, staples the ticket, and validates with `spctl`. Missing signing/notarization secrets should fail the macOS release job rather than publish an untrusted DMG.
