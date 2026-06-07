@@ -6,6 +6,7 @@ BUNDLE_ID="${MACOS_BUNDLE_ID:-com.skittlq.alanbeckersstickfigures.unofficial}"
 MIN_SYSTEM_VERSION="13.0"
 APP_VERSION="${APP_VERSION:-1.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
+MACOS_APP_CATEGORY_TYPE="${MACOS_APP_CATEGORY_TYPE:-public.app-category.entertainment}"
 MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 MACOS_CODESIGN_ENTITLEMENTS="${MACOS_CODESIGN_ENTITLEMENTS:-}"
 MACOS_PROVISIONING_PROFILE="${MACOS_PROVISIONING_PROFILE:-}"
@@ -80,8 +81,9 @@ fi
 
 chmod +x "$APP_BINARY"
 
-cp -R "$ROOT_DIR/conf" "$STICKFIGURES_DIR/conf"
-cp -R "$ROOT_DIR/img" "$STICKFIGURES_DIR/img"
+COPYFILE_DISABLE=1 cp -R "$ROOT_DIR/conf" "$STICKFIGURES_DIR/conf"
+COPYFILE_DISABLE=1 cp -R "$ROOT_DIR/img" "$STICKFIGURES_DIR/img"
+find "$APP_BUNDLE" \( -name '.DS_Store' -o -name '._*' \) -delete
 
 if [ -n "$MACOS_PROVISIONING_PROFILE" ]; then
   if [ ! -f "$MACOS_PROVISIONING_PROFILE" ]; then
@@ -118,6 +120,8 @@ cat >"$CONTENTS_DIR/Info.plist" <<PLIST
   <string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
+  <key>LSApplicationCategoryType</key>
+  <string>$MACOS_APP_CATEGORY_TYPE</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>
@@ -147,6 +151,11 @@ fi
 
 plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
 
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "$APP_BUNDLE" 2>/dev/null || true
+fi
+find "$APP_BUNDLE" \( -name '.DS_Store' -o -name '._*' \) -delete
+
 if command -v codesign >/dev/null 2>&1; then
   CODESIGN_ARGS=(--force --deep --sign "$MACOS_CODESIGN_IDENTITY")
   if [ "$MACOS_CODESIGN_IDENTITY" != "-" ]; then
@@ -157,6 +166,10 @@ if command -v codesign >/dev/null 2>&1; then
   fi
 
   codesign "${CODESIGN_ARGS[@]}" "$APP_BUNDLE" 2>&1 | sed '/replacing existing signature/d'
+  if command -v xattr >/dev/null 2>&1; then
+    xattr -cr "$APP_BUNDLE" 2>/dev/null || true
+  fi
+  find "$APP_BUNDLE" \( -name '.DS_Store' -o -name '._*' \) -delete
   codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 elif [ "$MACOS_REQUIRE_NOTARIZATION" = "1" ]; then
   echo "codesign is required for notarized release builds." >&2

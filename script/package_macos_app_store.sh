@@ -51,7 +51,7 @@ APP_BUNDLE="$(
 )"
 
 rm -f "$PKG_PATH"
-productbuild \
+COPYFILE_DISABLE=1 productbuild \
   --sign "$MACOS_APP_STORE_INSTALLER_IDENTITY" \
   --component "$APP_BUNDLE" \
   /Applications \
