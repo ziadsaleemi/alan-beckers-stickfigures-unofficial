@@ -39,6 +39,11 @@ private enum MascotAction: String {
     case cursorSpite
     case lassoSpin
     case stabbing
+    case playChase
+    case spar
+    case tease
+    case celebrate
+    case observePartner
 
     static let aiBehaviorChoices: [MascotAction] = [
         .stand,
@@ -59,7 +64,12 @@ private enum MascotAction: String {
         .cursorHate,
         .cursorSpite,
         .lassoSpin,
-        .stabbing
+        .stabbing,
+        .playChase,
+        .spar,
+        .tease,
+        .celebrate,
+        .observePartner
     ]
 
     var repeatsAnimation: Bool {
@@ -69,7 +79,8 @@ private enum MascotAction: String {
         case .stand, .sit, .walk, .run, .dash, .fall, .dragged, .thrown, .holdPointer,
              .climbWall, .climbCeiling, .grabWall, .grabCeiling, .dance, .lookAtMouse,
              .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs, .sprawl, .chaseMouse,
-             .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+             .cursorHate, .cursorSpite, .lassoSpin, .stabbing, .playChase, .spar,
+             .tease, .celebrate, .observePartner:
             return true
         }
     }
@@ -78,6 +89,15 @@ private enum MascotAction: String {
         switch self {
         case .dance, .lookAtMouse, .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs,
              .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var isStoryInteraction: Bool {
+        switch self {
+        case .playChase, .spar, .tease, .celebrate, .observePartner:
             return true
         default:
             return false
@@ -327,9 +347,10 @@ private final class LocalAIPlanner {
             "characterProfile": profile,
             "currentAction": currentAction.rawValue,
             "allowedActions": allowed.joined(separator: ", "),
+            "actionHints": actionHints(for: availableActions),
             "environment": environmentSummary,
             "nearbyCharacters": nearbyCharacters,
-            "instruction": "Choose one safe next desktop companion action. Prefer variety, use character personality, and respond with exactly one allowed action."
+            "instruction": "Choose one safe next desktop companion action. Prefer variety and character personality. When nearbyCharacters is not none nearby, often choose playChase, spar, tease, celebrate, or observePartner if allowed. Respond with exactly one allowed action."
         ].map { "\($0.key): \($0.value)" }.joined(separator: "\n")
 
         let payload: [String: Any] = [
@@ -354,6 +375,29 @@ private final class LocalAIPlanner {
         ]
 
         return try? JSONSerialization.data(withJSONObject: payload)
+    }
+
+    private func actionHints(for actions: [MascotAction]) -> String {
+        actions.map { action in
+            switch action {
+            case .playChase:
+                return "playChase=playful two-character chase"
+            case .spar:
+                return "spar=short pretend fight or rivalry beat with nearby character"
+            case .tease:
+                return "tease=taunt, prank, or dramatic reaction toward nearby character"
+            case .celebrate:
+                return "celebrate=playful shared dance or happy reaction"
+            case .observePartner:
+                return "observePartner=watch a nearby character quietly"
+            case .chaseMouse:
+                return "chaseMouse=run toward the pointer"
+            case .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+                return "\(action.rawValue)=victim-style suspicious or hostile bit"
+            default:
+                return "\(action.rawValue)=solo action"
+            }
+        }.joined(separator: "; ")
     }
 
     private static func jsonData(from content: String) -> Data? {
@@ -646,6 +690,21 @@ private final class ImageSet {
             return hasClip(named: "LassoSpin")
         case .stabbing:
             return hasClip(named: "Stabbing")
+        case .playChase:
+            return hasClip(named: "Run") || hasClip(named: "Walk")
+        case .spar:
+            return hasClip(named: "Dash") || hasClip(named: "Run") || hasClip(named: "Tripping")
+        case .tease:
+            return hasClip(named: "CursorSpite")
+                || hasClip(named: "CursorHate")
+                || hasClip(named: "Stabbing")
+                || hasClip(named: "Dance")
+                || hasClip(named: "Sprawl")
+                || hasClip(named: "Stand")
+        case .celebrate:
+            return hasClip(named: "Dance") || hasClip(named: "SitAndLookUp") || hasClip(named: "Stand")
+        case .observePartner:
+            return hasClip(named: "SitAndLookAtMouse") || hasClip(named: "SitAndLookUp") || hasClip(named: "Stand")
         case .fall, .dragged, .thrown, .land, .holdPointer, .climbCeiling, .grabWall, .grabCeiling:
             return false
         }
@@ -1192,6 +1251,9 @@ private final class Mascot {
     var lastDragUpdate = Date.distantPast
     var nextDecisionTick = 0
     var wallSide: CGFloat = -1
+    weak var storyPartner: Mascot?
+    var storyRole = 0
+    var storyEndTick = 0
     private var renderedImageName: String?
     private var renderedLookRight = false
     private var renderedSize = CGSize.zero
@@ -1212,6 +1274,9 @@ private final class Mascot {
     }
 
     func choose(_ newAction: MascotAction, targetX: CGFloat? = nil, targetY: CGFloat? = nil) {
+        if !newAction.isStoryInteraction {
+            clearStoryInteraction()
+        }
         action = newAction
         actionTick = 0
         needsImmediateRender = true
@@ -1234,12 +1299,31 @@ private final class Mascot {
         case .trip:
             velocity = CGVector(dx: lookRight ? Motion.tripSlideSpeed : -Motion.tripSlideSpeed, dy: 0)
         case .dance, .lookAtMouse, .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs,
-             .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+             .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing, .tease,
+             .celebrate, .observePartner:
             velocity = .zero
             nextDecisionTick = Int.random(in: 75...210)
-        case .walk, .run, .dash, .dragged, .holdPointer, .climbWall, .climbCeiling, .chaseMouse:
+        case .walk, .run, .dash, .dragged, .holdPointer, .climbWall, .climbCeiling,
+             .chaseMouse, .playChase, .spar:
             velocity = .zero
         }
+    }
+
+    func beginStoryInteraction(_ interaction: MascotAction, with partner: Mascot, role: Int, duration: Int) {
+        choose(interaction)
+        storyPartner = partner
+        storyRole = role
+        storyEndTick = duration
+    }
+
+    var isInStoryInteraction: Bool {
+        storyPartner != nil
+    }
+
+    private func clearStoryInteraction() {
+        storyPartner = nil
+        storyRole = 0
+        storyEndTick = 0
     }
 
     func close() {
@@ -1269,14 +1353,20 @@ private final class Mascot {
             stepCeilingMove(in: world)
         case .chaseMouse:
             stepChaseMouse(in: world)
+        case .playChase:
+            stepPlayChase(in: world)
+        case .spar:
+            stepSpar(in: world)
         case .trip:
             stepTrip(in: world)
             if actionTick > currentClipDuration(defaultDuration: 90) {
                 choose(.stand)
             }
         case .dance, .lookAtMouse, .sitLookUp, .sitLegsUp, .sitLegsDown, .dangleLegs,
-             .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing:
+             .sprawl, .cursorHate, .cursorSpite, .lassoSpin, .stabbing, .tease,
+             .celebrate, .observePartner:
             _ = settleOnGround(in: world)
+            faceStoryPartnerIfNeeded()
             if actionTick > nextDecisionTick {
                 choose(.stand)
             }
@@ -1373,10 +1463,35 @@ private final class Mascot {
             choose(suggestedAction)
         case .chaseMouse:
             choose(.chaseMouse)
+        case .playChase, .spar, .tease, .celebrate, .observePartner:
+            if controller?.beginStoryInteraction(suggestedAction, initiatedBy: self, in: world) == true {
+                return
+            }
+            chooseBehavior(fallbackSoloAction(for: suggestedAction), in: world)
         case .stand:
             choose(.stand)
         default:
             choose(.stand)
+        }
+    }
+
+    private func fallbackSoloAction(for interaction: MascotAction) -> MascotAction {
+        switch interaction {
+        case .playChase:
+            return imageSet.supportsAIAction(.chaseMouse) ? .chaseMouse : .run
+        case .spar:
+            return imageSet.supportsAIAction(.dash) ? .dash : .run
+        case .tease:
+            if imageSet.supportsAIAction(.cursorSpite) {
+                return .cursorSpite
+            }
+            return imageSet.supportsAIAction(.sprawl) ? .sprawl : .lookAtMouse
+        case .celebrate:
+            return imageSet.supportsAIAction(.dance) ? .dance : .sitLookUp
+        case .observePartner:
+            return imageSet.supportsAIAction(.lookAtMouse) ? .lookAtMouse : .stand
+        default:
+            return .stand
         }
     }
 
@@ -1488,6 +1603,84 @@ private final class Mascot {
         if abs(distance) < 36 || actionTick > 135 {
             choose(imageSet.supportsAIAction(.lookAtMouse) ? .lookAtMouse : .stand)
         }
+    }
+
+    private func stepPlayChase(in world: DesktopWorld) {
+        guard let partner = storyPartner else {
+            choose(.stand)
+            return
+        }
+
+        let delta = partner.anchor.x - anchor.x
+        let directionToPartner: CGFloat = delta >= 0 ? 1 : -1
+        let chaser = storyRole == 0
+        lookRight = chaser ? directionToPartner > 0 : directionToPartner < 0
+
+        let speed = chaser ? Motion.runSpeed : Motion.walkSpeed + 1.2
+        let movementDirection = chaser ? directionToPartner : -directionToPartner
+        anchor.x += speed * movementDirection
+        guard settleOnGround(in: world) else {
+            return
+        }
+
+        if actionTick > max(storyEndTick, 80) || abs(delta) < 42 {
+            choose(chaser ? (imageSet.supportsAIAction(.celebrate) ? .celebrate : .stand) : fallbackReactionAction())
+        }
+    }
+
+    private func stepSpar(in world: DesktopWorld) {
+        guard let partner = storyPartner else {
+            choose(.stand)
+            return
+        }
+
+        let delta = partner.anchor.x - anchor.x
+        lookRight = delta > 0
+        let distance = abs(delta)
+        if distance > 52 && actionTick < max(storyEndTick, 50) {
+            anchor.x += min(Motion.dashSpeed, max(2, distance / 12)) * (delta >= 0 ? 1 : -1)
+            _ = settleOnGround(in: world)
+            return
+        }
+
+        choose(sparFinishAction())
+    }
+
+    private func faceStoryPartnerIfNeeded() {
+        guard let partner = storyPartner else {
+            return
+        }
+
+        lookRight = partner.anchor.x > anchor.x
+    }
+
+    private func fallbackReactionAction() -> MascotAction {
+        if imageSet.supportsAIAction(.sprawl) {
+            return .sprawl
+        }
+        if imageSet.supportsAIAction(.trip) {
+            return .trip
+        }
+        return imageSet.supportsAIAction(.lookAtMouse) ? .lookAtMouse : .stand
+    }
+
+    private func sparFinishAction() -> MascotAction {
+        if imageSet.supportsAIAction(.stabbing), Bool.random() {
+            return .stabbing
+        }
+        if imageSet.supportsAIAction(.lassoSpin), Bool.random() {
+            return .lassoSpin
+        }
+        if imageSet.supportsAIAction(.cursorHate), Bool.random() {
+            return .cursorHate
+        }
+        if imageSet.supportsAIAction(.trip), Bool.random() {
+            return .trip
+        }
+        if imageSet.supportsAIAction(.sprawl) {
+            return .sprawl
+        }
+        return .stand
     }
 
     private func stepFall(in world: DesktopWorld) {
@@ -1717,6 +1910,16 @@ private final class Mascot {
             return imageSet.clip(named: "LassoSpin", fallback: ["Stand"])
         case .stabbing:
             return imageSet.clip(named: "Stabbing", fallback: ["CursorHate", "Stand"])
+        case .playChase:
+            return imageSet.clip(named: "Run", fallback: ["Walk", "Dash", "Stand"])
+        case .spar:
+            return imageSet.clip(named: "Dash", fallback: ["Run", "Walk", "Tripping", "Stand"])
+        case .tease:
+            return imageSet.clip(named: "CursorSpite", fallback: ["CursorHate", "Stabbing", "Dance", "Sprawl", "Stand"])
+        case .celebrate:
+            return imageSet.clip(named: "Dance", fallback: ["SitAndLookUp", "SitAndLookAtMouse", "Stand"])
+        case .observePartner:
+            return imageSet.clip(named: "SitAndLookAtMouse", fallback: ["SitAndLookUp", "Sit", "Stand"])
         }
     }
 
@@ -1782,6 +1985,7 @@ private final class MascotController: NSObject {
     private var imageSets: [ImageSet] = []
     private var pendingAIRequests = Set<Int>()
     private var aiSuggestions: [Int: MascotAction] = [:]
+    private var nextAmbientStoryInteraction = Date.distantPast
     var isRunning: Bool {
         timer != nil
     }
@@ -1840,6 +2044,7 @@ private final class MascotController: NSObject {
         timer = nil
         pendingAIRequests.removeAll()
         aiSuggestions.removeAll()
+        nextAmbientStoryInteraction = Date.distantPast
         mascots.forEach { $0.close() }
         mascots.removeAll()
         onStatusChanged?()
@@ -1903,9 +2108,42 @@ private final class MascotController: NSObject {
         return nil
     }
 
+    func beginStoryInteraction(_ interaction: MascotAction, initiatedBy mascot: Mascot, in world: DesktopWorld) -> Bool {
+        guard interaction.isStoryInteraction,
+              !mascot.isInStoryInteraction,
+              let partner = bestStoryPartner(for: mascot, interaction: interaction),
+              !partner.isInStoryInteraction else {
+            return false
+        }
+
+        let duration = Int.random(in: 78...150)
+        switch interaction {
+        case .playChase:
+            mascot.beginStoryInteraction(.playChase, with: partner, role: 0, duration: duration)
+            partner.beginStoryInteraction(.playChase, with: mascot, role: 1, duration: duration)
+        case .spar:
+            mascot.beginStoryInteraction(.spar, with: partner, role: 0, duration: Int.random(in: 44...78))
+            partner.beginStoryInteraction(.spar, with: mascot, role: 1, duration: Int.random(in: 44...78))
+        case .tease:
+            mascot.beginStoryInteraction(.tease, with: partner, role: 0, duration: duration)
+            partner.beginStoryInteraction(teaseReaction(for: partner), with: mascot, role: 1, duration: duration)
+        case .celebrate:
+            mascot.beginStoryInteraction(.celebrate, with: partner, role: 0, duration: duration)
+            partner.beginStoryInteraction(partner.imageSet.supportsAIAction(.celebrate) ? .celebrate : .observePartner, with: mascot, role: 1, duration: duration)
+        case .observePartner:
+            mascot.beginStoryInteraction(.observePartner, with: partner, role: 0, duration: duration)
+        default:
+            return false
+        }
+
+        onAIEvent?("Started \(interaction.rawValue) between \(mascot.imageSet.name) and \(partner.imageSet.name).")
+        return true
+    }
+
     private func tick() {
         world.refreshIfNeeded()
         mascots.forEach { $0.step(in: world) }
+        maybeStartAmbientStoryInteraction()
     }
 
     private var localAIEnabled: Bool {
@@ -1915,6 +2153,7 @@ private final class MascotController: NSObject {
 
     private func requestAISuggestion(for mascot: Mascot) {
         guard localAIEnabled,
+              !mascot.isInStoryInteraction,
               pendingAIRequests.insert(mascot.id).inserted else {
             return
         }
@@ -1958,6 +2197,47 @@ private final class MascotController: NSObject {
         }
     }
 
+    private func maybeStartAmbientStoryInteraction() {
+        guard localAIEnabled,
+              mascots.count >= 2,
+              Date() >= nextAmbientStoryInteraction else {
+            return
+        }
+
+        nextAmbientStoryInteraction = Date().addingTimeInterval(TimeInterval.random(in: 7...14))
+        let availableMascots = mascots.filter { mascot in
+            !mascot.isInStoryInteraction
+                && mascot.action != .dragged
+                && mascot.action != .holdPointer
+                && mascot.action != .fall
+                && mascot.action != .thrown
+        }
+        guard let initiator = availableMascots.randomElement() else {
+            return
+        }
+
+        let choices = ambientStoryChoices(for: initiator).filter { initiator.imageSet.supportsAIAction($0) }
+        guard let interaction = choices.randomElement(),
+              beginStoryInteraction(interaction, initiatedBy: initiator, in: world) else {
+            return
+        }
+    }
+
+    private func ambientStoryChoices(for mascot: Mascot) -> [MascotAction] {
+        switch mascot.imageSet.name.lowercased() {
+        case "tco", "tdl":
+            return [.spar, .spar, .tease, .playChase, .observePartner]
+        case "victim":
+            return [.tease, .spar, .observePartner, .playChase]
+        case "red", "purple":
+            return [.playChase, .spar, .tease, .celebrate]
+        case "green", "blue", "orange", "yellow":
+            return [.playChase, .celebrate, .tease, .observePartner]
+        default:
+            return [.playChase, .celebrate, .observePartner]
+        }
+    }
+
     private func aiEnvironmentSummary(for mascot: Mascot) -> String {
         let anchor = mascot.anchor
         let ground = world.groundY(for: anchor)
@@ -1995,7 +2275,7 @@ private final class MascotController: NSObject {
             }
 
             let distance = hypot(other.anchor.x - mascot.anchor.x, other.anchor.y - mascot.anchor.y)
-            guard distance < 320 else {
+            guard distance < 700 else {
                 return nil
             }
 
@@ -2004,6 +2284,77 @@ private final class MascotController: NSObject {
         }
 
         return neighbors.isEmpty ? "none nearby" : neighbors.joined(separator: ", ")
+    }
+
+    private func bestStoryPartner(for mascot: Mascot, interaction: MascotAction) -> Mascot? {
+        mascots
+            .filter { candidate in
+                candidate !== mascot
+                    && !candidate.isInStoryInteraction
+                    && candidate.action != .dragged
+                    && candidate.action != .holdPointer
+            }
+            .min { lhs, rhs in
+                storyPartnerScore(lhs, for: mascot, interaction: interaction)
+                    < storyPartnerScore(rhs, for: mascot, interaction: interaction)
+            }
+    }
+
+    private func storyPartnerScore(_ candidate: Mascot, for mascot: Mascot, interaction: MascotAction) -> CGFloat {
+        let distance = hypot(candidate.anchor.x - mascot.anchor.x, candidate.anchor.y - mascot.anchor.y)
+        let cappedDistance = min(distance, 900)
+        return cappedDistance - storyAffinityBonus(between: mascot.imageSet.name, and: candidate.imageSet.name, interaction: interaction)
+    }
+
+    private func storyAffinityBonus(between first: String, and second: String, interaction: MascotAction) -> CGFloat {
+        let a = first.lowercased()
+        let b = second.lowercased()
+        let pair = Set([a, b])
+
+        switch interaction {
+        case .spar, .tease:
+            if pair == Set(["tco", "tdl"]) {
+                return 520
+            }
+            if pair.contains("victim") && (pair.contains("tco") || pair.contains("tdl") || pair.contains("orange")) {
+                return 430
+            }
+            if pair.contains("red") || pair.contains("purple") {
+                return 180
+            }
+        case .playChase:
+            if pair.isSubset(of: Set(["red", "blue", "green", "yellow", "orange", "purple"])) {
+                return 360
+            }
+            if pair.contains("red") || pair.contains("orange") {
+                return 240
+            }
+        case .celebrate:
+            if pair == Set(["orange", "green"]) {
+                return 420
+            }
+            if pair.isSubset(of: Set(["red", "blue", "green", "yellow", "orange"])) {
+                return 300
+            }
+        case .observePartner:
+            if pair.contains("yellow") || pair.contains("victim") {
+                return 220
+            }
+        default:
+            break
+        }
+
+        return 0
+    }
+
+    private func teaseReaction(for mascot: Mascot) -> MascotAction {
+        if mascot.imageSet.supportsAIAction(.playChase), Bool.random() {
+            return .playChase
+        }
+        if mascot.imageSet.supportsAIAction(.sprawl), Bool.random() {
+            return .sprawl
+        }
+        return mascot.imageSet.supportsAIAction(.observePartner) ? .observePartner : .stand
     }
 }
 

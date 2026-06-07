@@ -76,7 +76,11 @@ The app filters out embedding-only Ollama models because they cannot answer
 chat/action requests. AI behavior is constrained to sprite-backed actions each
 character actually supports, including common actions such as walk, run, dash,
 trip, dance, sit poses, sprawl, chase mouse, and victim-specific cursor/lasso
-actions when those sprites are present.
+actions when those sprites are present. It also creates dynamic two-character
+composite interactions such as playful chases, short sparring/fighting beats,
+teasing, observing, and shared celebrations. These interactions are built from
+the shipped sprites and are biased by story relationships, such as TCO/TDL
+rivalry, victim's suspicious behavior, and the color gang's playfulness.
 
 If model loading hangs on `127.0.0.1:11434`, check for a port conflict:
 
