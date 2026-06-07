@@ -83,12 +83,18 @@ victim schemes, watch-and-react moments, celebrations, and quiet resets.
 
 The role-play system also creates dynamic two-character composite interactions
 such as follow-the-leader, copycat poses, guarding/watching, ambush/prank beats,
-playful chases, short sparring/fighting beats, teasing, observing, and shared
-celebrations. These interactions are built from the shipped sprites and are
-biased by story relationships, such as TCO/TDL rivalry, victim's suspicious
-behavior, and the color gang's playfulness. While a story beat is active,
-per-character model suggestions are paused; between scenes, one-off suggestions
-are throttled so the desktop behavior stays readable.
+hugs, tug-of-war, high-fives, arguments, comfort/rescue moments, team poses,
+trading places, building/inspecting together, victim trap/lasso beats, paired
+patrols, playful chases, short sparring/fighting beats, teasing, observing, and
+shared celebrations. Close-contact scenes first move the characters together,
+then play the paired action so the result reads as an interaction instead of two
+unrelated idle choices.
+
+These interactions are built from the shipped sprites and are biased by story
+relationships, such as TCO/TDL rivalry, victim's suspicious behavior, and the
+color gang's playfulness. While a story beat is active, per-character model
+suggestions are paused; between scenes, one-off model suggestions are limited to
+story interactions and throttled so the desktop behavior stays readable.
 
 If model loading hangs on `127.0.0.1:11434`, check for a port conflict:
 
