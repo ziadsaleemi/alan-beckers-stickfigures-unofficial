@@ -11,7 +11,6 @@ APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
 stop_running_app() {
   pkill -f "$APP_BINARY" >/dev/null 2>&1 || true
-  pkill -f "AlansStickfigures.jar" >/dev/null 2>&1 || true
 }
 
 build_app() {
@@ -26,10 +25,6 @@ verify_app() {
   sleep 3
   if ! pgrep -f "$APP_BINARY" >/dev/null; then
     echo "$APP_NAME did not stay running." >&2
-    exit 1
-  fi
-  if ! pgrep -f "AlansStickfigures.jar" >/dev/null; then
-    echo "The Java stickfigures process did not stay running." >&2
     exit 1
   fi
 }

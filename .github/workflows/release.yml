@@ -180,9 +180,9 @@ jobs:
           - Source ZIP
 
           Platform notes:
-          - Windows and macOS include the same patched Java runtime, image sets, Hold Pointer action, and transparent-window shadow fix.
+          - Windows includes the patched Java runtime, image sets, Hold Pointer action, and transparent-window shadow fix.
           - Windows uses the original tray/config flow for choosing active stickfigures and interactive windows.
-          - macOS adds the native menu-bar wrapper, settings window, multi-display desktop handling, normal-window awareness, and visible-Dock handling.
+          - macOS uses the native Swift/AppKit menu-bar app, settings window, multi-display desktop handling, normal-window awareness, and visible-Dock handling.
 
           GitHub also provides the standard Source code archives for this tag.
           NOTES

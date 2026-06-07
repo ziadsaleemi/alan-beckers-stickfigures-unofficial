@@ -16,7 +16,7 @@ APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
-JAVA_DIR="$RESOURCES_DIR/Java"
+STICKFIGURES_DIR="$RESOURCES_DIR/Stickfigures"
 APP_BINARY="$MACOS_DIR/$APP_NAME"
 SOURCE_FILE="$ROOT_DIR/macos/AlanBeckersStickfiguresLauncher/main.swift"
 ICON_SOURCE="$ROOT_DIR/repository-images/icon-xl.png"
@@ -38,7 +38,7 @@ if [ "$MACOS_REQUIRE_NOTARIZATION" = "1" ] && [ "$MACOS_CODESIGN_IDENTITY" = "-"
 fi
 
 rm -rf "$APP_BUNDLE" "$BUILD_DIR"
-mkdir -p "$MACOS_DIR" "$JAVA_DIR/lib" "$BUILD_DIR"
+mkdir -p "$MACOS_DIR" "$STICKFIGURES_DIR" "$BUILD_DIR"
 
 compile_arch() {
   local arch="$1"
@@ -78,53 +78,8 @@ fi
 
 chmod +x "$APP_BINARY"
 
-cp "$ROOT_DIR/AlansStickfigures.jar" "$JAVA_DIR/AlansStickfigures.jar"
-cp -R "$ROOT_DIR/conf" "$JAVA_DIR/conf"
-cp -R "$ROOT_DIR/img" "$JAVA_DIR/img"
-cp "$ROOT_DIR"/lib/*.jar "$JAVA_DIR/lib/"
-
-sign_embedded_macos_libraries() {
-  if [ "$MACOS_CODESIGN_IDENTITY" = "-" ]; then
-    return 0
-  fi
-
-  if ! command -v unzip >/dev/null 2>&1 || ! command -v zip >/dev/null 2>&1; then
-    echo "zip and unzip are required to sign native libraries embedded in bundled JARs." >&2
-    exit 1
-  fi
-
-  local jar_path
-  for jar_path in "$JAVA_DIR/AlansStickfigures.jar" "$JAVA_DIR"/lib/*.jar; do
-    [ -f "$jar_path" ] || continue
-
-    local entries_file
-    entries_file="$(mktemp)"
-    unzip -Z1 "$jar_path" | grep -E '\.(dylib|jnilib)$' >"$entries_file" || true
-
-    if [ -s "$entries_file" ]; then
-      local temp_dir
-      temp_dir="$(mktemp -d)"
-
-      local entry
-      while IFS= read -r entry; do
-        unzip -qq "$jar_path" "$entry" -d "$temp_dir"
-
-        local native_path="$temp_dir/$entry"
-        if file "$native_path" | grep -q 'Mach-O'; then
-          codesign --force --sign "$MACOS_CODESIGN_IDENTITY" --options runtime --timestamp "$native_path"
-          codesign --verify --verbose=2 "$native_path"
-          (cd "$temp_dir" && zip -q "$jar_path" "$entry")
-        fi
-      done <"$entries_file"
-
-      rm -rf "$temp_dir"
-    fi
-
-    rm -f "$entries_file"
-  done
-}
-
-sign_embedded_macos_libraries
+cp -R "$ROOT_DIR/conf" "$STICKFIGURES_DIR/conf"
+cp -R "$ROOT_DIR/img" "$STICKFIGURES_DIR/img"
 
 cat >"$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -153,6 +108,8 @@ cat >"$CONTENTS_DIR/Info.plist" <<PLIST
   <string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
+  <key>LSUIElement</key>
+  <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSPrincipalClass</key>

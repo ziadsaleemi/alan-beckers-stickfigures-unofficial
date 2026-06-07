@@ -1,6 +1,5 @@
 import Cocoa
 import CoreGraphics
-import Darwin
 import Foundation
 
 private enum DefaultsKey {
@@ -9,61 +8,1140 @@ private enum DefaultsKey {
     static let enabledImageSets = "enabledStickfigureImageSets"
 }
 
-private struct WindowSnapshot {
-    let ownerPID: pid_t
-    let bounds: CGRect
+private enum MascotAction: String {
+    case stand
+    case sit
+    case walk
+    case run
+    case dash
+    case fall
+    case dragged
+    case thrown
+    case holdPointer
+    case climbWall
+    case climbCeiling
+    case grabWall
+    case grabCeiling
+    case trip
+    case dance
+}
+
+private enum Motion {
+    static let walkSpeed: CGFloat = 2.4
+    static let runSpeed: CGFloat = 4.8
+    static let dashSpeed: CGFloat = 6.4
+    static let climbSpeed: CGFloat = 3.6
+    static let ceilingSpeed: CGFloat = 4.2
+    static let tripSlideSpeed: CGFloat = 3.2
+    static let dropTolerance: CGFloat = 18
+}
+
+private struct PoseFrame {
+    let imageName: String
+    let anchor: CGPoint
+    let velocity: CGVector
+    let duration: Int
+}
+
+private final class ActionClip {
+    let name: String
+    let frames: [PoseFrame]
+    private let totalDuration: Int
+
+    init(name: String, frames: [PoseFrame]) {
+        self.name = name
+        self.frames = frames
+        self.totalDuration = max(1, frames.reduce(0) { $0 + max(1, $1.duration) })
+    }
+
+    var duration: Int {
+        totalDuration
+    }
+
+    func frame(at tick: Int) -> PoseFrame? {
+        guard !frames.isEmpty else {
+            return nil
+        }
+
+        var remaining = tick % totalDuration
+        for frame in frames {
+            remaining -= max(1, frame.duration)
+            if remaining < 0 {
+                return frame
+            }
+        }
+
+        return frames.last
+    }
+}
+
+private final class ActionXMLParser: NSObject, XMLParserDelegate {
+    private var currentActionName: String?
+    private var currentFrames: [PoseFrame] = []
+    private var insideAnimation = false
+    private(set) var clips: [String: ActionClip] = [:]
+
+    static func parse(url: URL) -> [String: ActionClip] {
+        guard let parser = XMLParser(contentsOf: url) else {
+            return [:]
+        }
+
+        let delegate = ActionXMLParser()
+        parser.delegate = delegate
+        parser.shouldProcessNamespaces = false
+        parser.parse()
+        return delegate.clips
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
+        switch elementName {
+        case "Action":
+            currentActionName = attributeDict["Name"]
+            currentFrames = []
+        case "Animation":
+            insideAnimation = currentActionName != nil && currentFrames.isEmpty
+        case "Pose" where insideAnimation:
+            guard let imageName = attributeDict["Image"] else {
+                return
+            }
+            currentFrames.append(PoseFrame(
+                imageName: imageName.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+                anchor: parsePoint(attributeDict["ImageAnchor"], fallback: CGPoint(x: 64, y: 128)),
+                velocity: parseVelocity(attributeDict["Velocity"]),
+                duration: max(1, parseInt(attributeDict["Duration"], fallback: 1))
+            ))
+        default:
+            return
+        }
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        switch elementName {
+        case "Animation":
+            insideAnimation = false
+        case "Action":
+            if let name = currentActionName, !currentFrames.isEmpty, clips[name] == nil {
+                clips[name] = ActionClip(name: name, frames: currentFrames)
+            }
+            currentActionName = nil
+            currentFrames = []
+        default:
+            return
+        }
+    }
+
+    private func parsePoint(_ rawValue: String?, fallback: CGPoint) -> CGPoint {
+        guard let rawValue else {
+            return fallback
+        }
+
+        let parts = rawValue.split(separator: ",")
+        guard parts.count == 2,
+              let x = Double(parts[0].trimmingCharacters(in: .whitespaces)),
+              let y = Double(parts[1].trimmingCharacters(in: .whitespaces)) else {
+            return fallback
+        }
+
+        return CGPoint(x: x, y: y)
+    }
+
+    private func parseVelocity(_ rawValue: String?) -> CGVector {
+        let point = parsePoint(rawValue, fallback: .zero)
+        return CGVector(dx: point.x, dy: point.y)
+    }
+
+    private func parseInt(_ rawValue: String?, fallback: Int) -> Int {
+        guard let rawValue,
+              let value = Int(rawValue.trimmingCharacters(in: .whitespaces)) else {
+            return fallback
+        }
+
+        return value
+    }
+}
+
+private final class ImageSet {
+    let name: String
+    let directoryURL: URL
+    let clips: [String: ActionClip]
+    private var imageCache: [String: NSImage] = [:]
+
+    init(name: String, directoryURL: URL) {
+        self.name = name
+        self.directoryURL = directoryURL
+        self.clips = ActionXMLParser.parse(url: directoryURL
+            .appendingPathComponent("conf", isDirectory: true)
+            .appendingPathComponent("actions.xml"))
+    }
+
+    func clip(named preferredName: String, fallback fallbackNames: [String] = []) -> ActionClip? {
+        if let clip = clips[preferredName] {
+            return clip
+        }
+
+        for fallbackName in fallbackNames {
+            if let clip = clips[fallbackName] {
+                return clip
+            }
+        }
+
+        return clips.values.first
+    }
+
+    func image(named imageName: String) -> NSImage? {
+        if let image = imageCache[imageName] {
+            return image
+        }
+
+        let url = directoryURL.appendingPathComponent(imageName)
+        guard let data = try? Data(contentsOf: url),
+              let representation = NSBitmapImageRep(data: data) else {
+            return nil
+        }
+
+        let pixelSize = NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
+        representation.size = pixelSize
+
+        let image = NSImage(size: pixelSize)
+        image.addRepresentation(representation)
+        image.cacheMode = NSImage.CacheMode.never
+
+        imageCache[imageName] = image
+        return image
+    }
+}
+
+private struct PlatformSurface {
+    let rect: CGRect
     let title: String
 }
 
-private enum DockEdge {
-    case bottom
-    case left
-    case right
+private final class DesktopWorld {
+    private(set) var platforms: [PlatformSurface] = []
+    private var lastRefresh = Date.distantPast
+
+    func refreshIfNeeded() {
+        guard Date().timeIntervalSince(lastRefresh) > 0.35 else {
+            return
+        }
+
+        lastRefresh = Date()
+        platforms = windowPlatforms() + dockPlatform()
+    }
+
+    var desktopFrame: CGRect {
+        let screens = NSScreen.screens.map { $0.frame }
+        guard let first = screens.first else {
+            return CGRect(x: 0, y: 0, width: 1440, height: 900)
+        }
+
+        return screens.dropFirst().reduce(first) { $0.union($1) }
+    }
+
+    func screen(containing point: CGPoint) -> NSScreen? {
+        NSScreen.screens.first { $0.frame.contains(point) }
+            ?? NSScreen.screens.first { point.x >= $0.frame.minX && point.x <= $0.frame.maxX }
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+    }
+
+    func floorY(atX x: CGFloat) -> CGFloat {
+        let point = CGPoint(x: x, y: 0)
+        if let screen = screen(containing: point) {
+            return screen.frame.minY + 8
+        }
+
+        return desktopFrame.minY + 8
+    }
+
+    func ceilingY(atX x: CGFloat) -> CGFloat {
+        let point = CGPoint(x: x, y: 0)
+        if let screen = screen(containing: point) {
+            return screen.visibleFrame.maxY - 12
+        }
+
+        return desktopFrame.maxY - 12
+    }
+
+    func leftWallX(near point: CGPoint) -> CGFloat {
+        screen(containing: point)?.frame.minX ?? desktopFrame.minX
+    }
+
+    func rightWallX(near point: CGPoint) -> CGFloat {
+        screen(containing: point)?.frame.maxX ?? desktopFrame.maxX
+    }
+
+    func surfaceBelow(anchor: CGPoint, tolerance: CGFloat = 96) -> PlatformSurface? {
+        refreshIfNeeded()
+        var best: PlatformSurface?
+        var bestY = floorY(atX: anchor.x)
+
+        for platform in platforms where platform.rect.minX - 24 <= anchor.x && anchor.x <= platform.rect.maxX + 24 {
+            let top = platform.rect.maxY
+            guard top <= anchor.y + 8, anchor.y - top <= tolerance else {
+                continue
+            }
+
+            if top > bestY {
+                best = platform
+                bestY = top
+            }
+        }
+
+        return best
+    }
+
+    func groundY(for anchor: CGPoint) -> CGFloat {
+        surfaceBelow(anchor: anchor)?.rect.maxY ?? floorY(atX: anchor.x)
+    }
+
+    func randomPointOnFloor() -> CGPoint {
+        let frame = desktopFrame
+        let x = CGFloat.random(in: (frame.minX + 120)...max(frame.minX + 121, frame.maxX - 120))
+        return CGPoint(x: x, y: floorY(atX: x))
+    }
+
+    private func windowPlatforms() -> [PlatformSurface] {
+        let ignoredOwners: Set<String> = [
+            "Alan Beckers Stickfigures",
+            "Control Center",
+            "Dock",
+            "Notification Center",
+            "SystemUIServer",
+            "Window Server"
+        ]
+        let maxY = desktopFrame.maxY
+        let currentPID = getpid()
+
+        guard let windowInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return []
+        }
+
+        return windowInfo.compactMap { info -> PlatformSurface? in
+            guard let layer = info[kCGWindowLayer as String] as? NSNumber,
+                  layer.intValue == 0,
+                  let ownerPID = info[kCGWindowOwnerPID as String] as? NSNumber,
+                  ownerPID.int32Value != currentPID,
+                  let boundsDictionary = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: boundsDictionary) else {
+                return nil
+            }
+
+            let ownerName = info[kCGWindowOwnerName as String] as? String ?? ""
+            if ignoredOwners.contains(ownerName) || ownerName.localizedCaseInsensitiveContains("Alan Beckers Stickfigures") {
+                return nil
+            }
+
+            let alpha = (info[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1.0
+            guard alpha > 0.01, bounds.width >= 160, bounds.height >= 100 else {
+                return nil
+            }
+
+            let converted = CGRect(
+                x: bounds.minX,
+                y: maxY - bounds.minY - bounds.height,
+                width: bounds.width,
+                height: bounds.height
+            )
+            let title = (info[kCGWindowName as String] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? ownerName
+            return PlatformSurface(rect: converted.integral, title: title)
+        }
+    }
+
+    private func dockPlatform() -> [PlatformSurface] {
+        guard !dockAutohideEnabled() else {
+            return []
+        }
+
+        guard let screen = NSScreen.screens.max(by: { dockInset(on: $0) < dockInset(on: $1) }) else {
+            return []
+        }
+
+        let inset = dockInset(on: screen)
+        guard inset >= 12 else {
+            return []
+        }
+
+        let frame = screen.frame
+        let edge = dockPreferredEdge()
+        let maxLength = edge == "bottom" ? frame.width : frame.height
+        let dockLength = estimatedDockLength(maxLength: maxLength)
+        let rect: CGRect
+
+        switch edge {
+        case "left":
+            rect = CGRect(
+                x: frame.minX,
+                y: frame.midY - dockLength / 2,
+                width: inset,
+                height: dockLength
+            )
+        case "right":
+            rect = CGRect(
+                x: frame.maxX - inset,
+                y: frame.midY - dockLength / 2,
+                width: inset,
+                height: dockLength
+            )
+        default:
+            rect = CGRect(
+                x: frame.midX - dockLength / 2,
+                y: frame.minY,
+                width: dockLength,
+                height: inset
+            )
+        }
+
+        return [PlatformSurface(rect: rect.integral, title: "Dock")]
+    }
+
+    private func dockInset(on screen: NSScreen) -> CGFloat {
+        let frame = screen.frame
+        let visible = screen.visibleFrame
+        switch dockPreferredEdge() {
+        case "left":
+            return max(0, visible.minX - frame.minX)
+        case "right":
+            return max(0, frame.maxX - visible.maxX)
+        default:
+            return max(0, visible.minY - frame.minY)
+        }
+    }
+
+    private func dockPreferredEdge() -> String {
+        UserDefaults(suiteName: "com.apple.dock")?.string(forKey: "orientation") ?? "bottom"
+    }
+
+    private func dockAutohideEnabled() -> Bool {
+        guard let value = UserDefaults(suiteName: "com.apple.dock")?.object(forKey: "autohide") else {
+            return false
+        }
+
+        return boolValue(value)
+    }
+
+    private func estimatedDockLength(maxLength: CGFloat) -> CGFloat {
+        let defaults = UserDefaults(suiteName: "com.apple.dock")
+        let tileSize = max(24, CGFloat(defaults?.integer(forKey: "tilesize") ?? 48))
+        let appCount = defaults?.array(forKey: "persistent-apps")?.count ?? 0
+        let otherCount = defaults?.array(forKey: "persistent-others")?.count ?? 0
+        let recentCount = boolValue(defaults?.object(forKey: "show-recents") ?? true) ? 3 : 0
+        let iconCount = max(6, appCount + otherCount + recentCount + 2)
+        return min(maxLength, max(300, CGFloat(iconCount) * (tileSize + 8) + 72))
+    }
+
+    private func boolValue(_ value: Any) -> Bool {
+        if let bool = value as? Bool {
+            return bool
+        }
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        if let string = value as? String {
+            return ["1", "true", "yes"].contains(string.lowercased())
+        }
+        return false
+    }
+}
+
+private final class MascotWindow: NSPanel {
+    init(size: CGSize) {
+        super.init(
+            contentRect: CGRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        level = .screenSaver
+        ignoresMouseEvents = false
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        isReleasedWhenClosed = false
+    }
+
+    override var canBecomeKey: Bool {
+        false
+    }
+
+    override var canBecomeMain: Bool {
+        false
+    }
+}
+
+private final class SpriteView: NSView {
+    weak var mascot: Mascot?
+    var image: NSImage?
+    var lookRight = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureLayer()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureLayer()
+    }
+
+    private func configureLayer() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.isOpaque = false
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    override var isFlipped: Bool {
+        false
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.clear.setFill()
+        bounds.fill(using: .clear)
+
+        guard let image else {
+            return
+        }
+
+        NSGraphicsContext.current?.imageInterpolation = .none
+        if lookRight {
+            guard let context = NSGraphicsContext.current?.cgContext else {
+                return
+            }
+            context.saveGState()
+            context.translateBy(x: bounds.maxX, y: bounds.minY)
+            context.scaleBy(x: -1, y: 1)
+            image.draw(in: CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height))
+            context.restoreGState()
+        } else {
+            image.draw(in: bounds)
+        }
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        mascot?.controller?.beginDrag(mascot: mascot!, event: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        mascot?.controller?.continueDrag(mascot: mascot!, event: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        mascot?.controller?.endDrag(mascot: mascot!, event: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard let mascot else {
+            return
+        }
+
+        let menu = NSMenu()
+        let hold = NSMenuItem(title: "Hold Pointer", action: #selector(MascotController.holdPointerFromMenu(_:)), keyEquivalent: "")
+        hold.representedObject = mascot
+        hold.target = mascot.controller
+        menu.addItem(hold)
+
+        let release = NSMenuItem(title: "Release Pointer", action: #selector(MascotController.releasePointerFromMenu(_:)), keyEquivalent: "")
+        release.representedObject = mascot
+        release.target = mascot.controller
+        menu.addItem(release)
+
+        menu.addItem(.separator())
+
+        let dismiss = NSMenuItem(title: "Hide This Stickfigure", action: #selector(MascotController.hideMascotFromMenu(_:)), keyEquivalent: "")
+        dismiss.representedObject = mascot
+        dismiss.target = mascot.controller
+        menu.addItem(dismiss)
+
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+}
+
+private final class Mascot {
+    let id: Int
+    let imageSet: ImageSet
+    let window: MascotWindow
+    let view: SpriteView
+    weak var controller: MascotController?
+
+    var anchor: CGPoint
+    var lookRight = false
+    var action: MascotAction = .fall
+    var actionTick = 0
+    var targetX: CGFloat?
+    var targetY: CGFloat?
+    var velocity = CGVector(dx: 0, dy: 0)
+    var dragOffset = CGVector(dx: 0, dy: 0)
+    var lastDragLocation: CGPoint?
+    var lastDragVelocity = CGVector(dx: 0, dy: 0)
+    var nextDecisionTick = 0
+    var wallSide: CGFloat = -1
+    private var renderedImageName: String?
+    private var renderedLookRight = false
+    private var renderedSize = CGSize.zero
+
+    init(id: Int, imageSet: ImageSet, anchor: CGPoint, controller: MascotController) {
+        self.id = id
+        self.imageSet = imageSet
+        self.anchor = anchor
+        self.controller = controller
+        self.view = SpriteView(frame: CGRect(x: 0, y: 0, width: 128, height: 128))
+        self.window = MascotWindow(size: CGSize(width: 128, height: 128))
+        view.mascot = self
+        window.contentView = view
+        choose(.fall)
+        render()
+        window.orderFrontRegardless()
+    }
+
+    func choose(_ newAction: MascotAction, targetX: CGFloat? = nil, targetY: CGFloat? = nil) {
+        action = newAction
+        actionTick = 0
+        self.targetX = targetX
+        self.targetY = targetY
+
+        switch newAction {
+        case .thrown:
+            velocity = lastDragVelocity
+            if abs(velocity.dx) < 2 {
+                velocity.dx = lookRight ? 7 : -7
+            }
+            if abs(velocity.dy) < 2 {
+                velocity.dy = 8
+            }
+        case .fall:
+            velocity.dy = min(velocity.dy, -2)
+        case .stand, .sit:
+            velocity = .zero
+            nextDecisionTick = Int.random(in: 55...180)
+        case .grabWall, .grabCeiling:
+            velocity = .zero
+            nextDecisionTick = Int.random(in: 24...55)
+        case .trip:
+            velocity = CGVector(dx: lookRight ? Motion.tripSlideSpeed : -Motion.tripSlideSpeed, dy: 0)
+        case .walk, .run, .dash, .dragged, .holdPointer, .climbWall, .climbCeiling, .dance:
+            velocity = .zero
+        }
+    }
+
+    func close() {
+        window.orderOut(nil)
+    }
+
+    func step(in world: DesktopWorld) {
+        actionTick += 1
+
+        switch action {
+        case .holdPointer:
+            let mouse = NSEvent.mouseLocation
+            anchor = CGPoint(x: mouse.x + dragOffset.dx, y: mouse.y + dragOffset.dy)
+        case .dragged:
+            break
+        case .thrown:
+            stepThrown(in: world)
+        case .fall:
+            stepFall(in: world)
+        case .walk, .run, .dash:
+            stepHorizontalMove(in: world)
+        case .climbWall:
+            stepWallClimb(in: world)
+        case .climbCeiling:
+            stepCeilingMove(in: world)
+        case .trip:
+            stepTrip(in: world)
+            if actionTick > currentClipDuration(defaultDuration: 90) {
+                choose(.stand)
+            }
+        case .dance:
+            _ = settleOnGround(in: world)
+            if actionTick > currentClipDuration(defaultDuration: 90) {
+                choose(.stand)
+            }
+        case .grabWall:
+            lookRight = wallSide > 0
+            if actionTick > nextDecisionTick {
+                choose(.climbWall, targetY: world.ceilingY(atX: anchor.x))
+            }
+        case .grabCeiling:
+            clampSpriteTop(to: world.ceilingY(atX: anchor.x))
+            if actionTick > nextDecisionTick {
+                choose(.climbCeiling, targetX: randomTargetX(in: world))
+            }
+        case .stand, .sit:
+            if settleOnGround(in: world), actionTick > nextDecisionTick {
+                chooseNextBehavior(in: world)
+            }
+        }
+
+        keepInsideDesktop(world)
+        render(immediate: action == .dragged || action == .holdPointer)
+    }
+
+    func beginDrag(at mouse: CGPoint) {
+        dragOffset = CGVector(dx: anchor.x - mouse.x, dy: anchor.y - mouse.y)
+        lastDragLocation = mouse
+        lastDragVelocity = .zero
+        choose(.dragged)
+    }
+
+    func drag(to mouse: CGPoint) {
+        if let lastDragLocation {
+            lastDragVelocity = CGVector(dx: mouse.x - lastDragLocation.x, dy: mouse.y - lastDragLocation.y)
+        }
+        lastDragLocation = mouse
+        anchor = CGPoint(x: mouse.x + dragOffset.dx, y: mouse.y + dragOffset.dy)
+        render(immediate: true)
+    }
+
+    func endDrag() {
+        choose(.thrown)
+    }
+
+    func holdPointer() {
+        let mouse = NSEvent.mouseLocation
+        dragOffset = CGVector(dx: anchor.x - mouse.x, dy: anchor.y - mouse.y)
+        choose(.holdPointer)
+    }
+
+    func releasePointer() {
+        choose(.fall)
+    }
+
+    private func chooseNextBehavior(in world: DesktopWorld) {
+        let roll = Int.random(in: 0..<100)
+
+        if roll < 38 {
+            choose(.walk, targetX: randomTargetX(in: world))
+        } else if roll < 56 {
+            choose(.run, targetX: randomTargetX(in: world))
+        } else if roll < 67 {
+            choose(.sit)
+        } else if roll < 77 {
+            choose(.trip)
+        } else if roll < 84 {
+            choose(.dance)
+        } else if roll < 92 {
+            runTowardWall(in: world)
+        } else {
+            choose(.stand)
+        }
+    }
+
+    private func runTowardWall(in world: DesktopWorld) {
+        let left = world.leftWallX(near: anchor) + 8
+        let right = world.rightWallX(near: anchor) - 8
+        let goRight = abs(anchor.x - left) > abs(anchor.x - right)
+        wallSide = goRight ? 1 : -1
+        choose(.dash, targetX: goRight ? right : left)
+    }
+
+    private func stepHorizontalMove(in world: DesktopWorld) {
+        guard let targetX else {
+            choose(.stand)
+            return
+        }
+
+        lookRight = targetX > anchor.x
+        let direction: CGFloat = lookRight ? 1 : -1
+        anchor.x += movementSpeed() * direction
+        guard settleOnGround(in: world) else {
+            return
+        }
+
+        let reached = lookRight ? anchor.x >= targetX : anchor.x <= targetX
+        if reached {
+            anchor.x = targetX
+            if abs(targetX - world.leftWallX(near: anchor)) < 24 || abs(targetX - world.rightWallX(near: anchor)) < 24 {
+                choose(.grabWall)
+            } else {
+                choose(Bool.random() ? .stand : .sit)
+            }
+        }
+    }
+
+    private func stepWallClimb(in world: DesktopWorld) {
+        guard let targetY else {
+            choose(.fall)
+            return
+        }
+
+        lookRight = wallSide > 0
+        let direction: CGFloat = targetY > anchor.y ? 1 : -1
+        anchor.y += Motion.climbSpeed * direction
+        anchor.x = wallSide < 0 ? world.leftWallX(near: anchor) + 8 : world.rightWallX(near: anchor) - 8
+
+        let ceiling = world.ceilingY(atX: anchor.x)
+        let reached = direction > 0 ? anchor.y >= targetY : anchor.y <= targetY
+        let visibleTop = currentSpriteRect()?.maxY ?? anchor.y
+        if reached || visibleTop >= ceiling || actionTick > 180 {
+            anchor.y = ceiling
+            choose(.grabCeiling)
+        }
+    }
+
+    private func stepCeilingMove(in world: DesktopWorld) {
+        guard let targetX else {
+            choose(.grabCeiling)
+            return
+        }
+
+        let ceiling = world.ceilingY(atX: anchor.x)
+        anchor.y = ceiling
+        lookRight = targetX > anchor.x
+        let direction: CGFloat = lookRight ? 1 : -1
+        anchor.x += Motion.ceilingSpeed * direction
+        clampSpriteTop(to: ceiling)
+        let reached = lookRight ? anchor.x >= targetX : anchor.x <= targetX
+        if reached || actionTick > 180 {
+            choose(.fall)
+        }
+    }
+
+    private func stepFall(in world: DesktopWorld) {
+        velocity.dy -= 0.65
+        velocity.dx *= 0.98
+        anchor.x += velocity.dx
+        anchor.y += velocity.dy
+
+        let ground = world.groundY(for: anchor)
+        if anchor.y <= ground {
+            anchor.y = ground
+            velocity = .zero
+            choose(.stand)
+        }
+    }
+
+    private func stepThrown(in world: DesktopWorld) {
+        velocity.dy -= 0.6
+        velocity.dx *= 0.985
+        anchor.x += velocity.dx
+        anchor.y += velocity.dy
+
+        let ground = world.groundY(for: anchor)
+        if anchor.y <= ground {
+            anchor.y = ground
+            velocity = .zero
+            choose(.trip)
+        }
+    }
+
+    private func stepTrip(in world: DesktopWorld) {
+        anchor.x += velocity.dx
+        velocity.dx *= 0.88
+        _ = settleOnGround(in: world)
+    }
+
+    private func movementSpeed() -> CGFloat {
+        switch action {
+        case .walk:
+            return Motion.walkSpeed
+        case .run:
+            return Motion.runSpeed
+        case .dash:
+            return Motion.dashSpeed
+        default:
+            return Motion.walkSpeed
+        }
+    }
+
+    @discardableResult
+    private func settleOnGround(in world: DesktopWorld) -> Bool {
+        let ground = world.groundY(for: anchor)
+        if ground < anchor.y - Motion.dropTolerance {
+            choose(.fall)
+            return false
+        }
+
+        anchor.y = ground
+        return true
+    }
+
+    private func keepInsideDesktop(_ world: DesktopWorld) {
+        let frame = world.desktopFrame.insetBy(dx: 8, dy: 0)
+        if anchor.x < frame.minX {
+            anchor.x = frame.minX
+            wallSide = -1
+            if action != .dragged && action != .holdPointer {
+                choose(.grabWall)
+            }
+        } else if anchor.x > frame.maxX {
+            anchor.x = frame.maxX
+            wallSide = 1
+            if action != .dragged && action != .holdPointer {
+                choose(.grabWall)
+            }
+        }
+
+        let ceiling = world.ceilingY(atX: anchor.x)
+        guard let rect = currentSpriteRect(), rect.maxY > ceiling else {
+            return
+        }
+
+        switch action {
+        case .dragged, .holdPointer:
+            break
+        case .grabCeiling, .climbCeiling:
+            clampSpriteTop(to: ceiling)
+        case .climbWall:
+            anchor.y = ceiling
+            choose(.grabCeiling)
+        default:
+            anchor.y -= rect.maxY - ceiling
+            velocity.dy = min(velocity.dy, 0)
+            if action != .fall {
+                choose(.fall)
+            }
+        }
+    }
+
+    private func randomTargetX(in world: DesktopWorld) -> CGFloat {
+        let frame = world.desktopFrame
+        let minX = frame.minX + 80
+        let maxX = frame.maxX - 80
+        guard minX < maxX else {
+            return anchor.x
+        }
+        return CGFloat.random(in: minX...maxX)
+    }
+
+    private func currentFrame() -> PoseFrame? {
+        let clip = clipForCurrentAction()
+        return clip?.frame(at: actionTick)
+    }
+
+    private func currentClipDuration(defaultDuration: Int) -> Int {
+        clipForCurrentAction()?.duration ?? defaultDuration
+    }
+
+    private func clipForCurrentAction() -> ActionClip? {
+        switch action {
+        case .stand:
+            return imageSet.clip(named: "Stand")
+        case .sit:
+            return imageSet.clip(named: "SitAndLookAtMouse", fallback: ["Sit"])
+        case .walk:
+            return imageSet.clip(named: "Walk")
+        case .run:
+            return imageSet.clip(named: "Run", fallback: ["Dash", "Walk"])
+        case .dash:
+            return imageSet.clip(named: "Dash", fallback: ["Run", "Walk"])
+        case .fall, .thrown:
+            return imageSet.clip(named: "Falling", fallback: ["Stand"])
+        case .dragged, .holdPointer:
+            return imageSet.clip(named: "Dragged", fallback: ["Stand"])
+        case .climbWall:
+            return imageSet.clip(named: "ClimbWall", fallback: ["GrabWall"])
+        case .climbCeiling:
+            return imageSet.clip(named: "ClimbCeiling", fallback: ["GrabCeiling"])
+        case .grabWall:
+            return imageSet.clip(named: "GrabWall", fallback: ["Stand"])
+        case .grabCeiling:
+            return imageSet.clip(named: "GrabCeiling", fallback: ["Stand"])
+        case .trip:
+            return imageSet.clip(named: "Tripping", fallback: ["StandFromFloor", "Stand"])
+        case .dance:
+            return imageSet.clip(named: "Dance", fallback: ["Stand"])
+        }
+    }
+
+    private func render(immediate: Bool = false) {
+        guard let frame = currentFrame(),
+              let image = imageSet.image(named: frame.imageName) else {
+            return
+        }
+
+        let rect = spriteRect(for: frame, image: image)
+
+        window.setFrame(rect, display: immediate)
+        let frameChanged = renderedImageName != frame.imageName || renderedLookRight != lookRight || renderedSize != rect.size
+        if frameChanged {
+            view.frame = CGRect(origin: .zero, size: rect.size)
+            view.image = image
+            view.lookRight = lookRight
+            view.needsDisplay = true
+            renderedImageName = frame.imageName
+            renderedLookRight = lookRight
+            renderedSize = rect.size
+            if immediate {
+                view.displayIfNeeded()
+            }
+        }
+    }
+
+    private func currentSpriteRect() -> CGRect? {
+        guard let frame = currentFrame(),
+              let image = imageSet.image(named: frame.imageName) else {
+            return nil
+        }
+
+        return spriteRect(for: frame, image: image)
+    }
+
+    private func clampSpriteTop(to ceiling: CGFloat) {
+        guard let rect = currentSpriteRect(), rect.maxY > ceiling else {
+            return
+        }
+
+        anchor.y -= rect.maxY - ceiling
+    }
+
+    private func spriteRect(for frame: PoseFrame, image: NSImage) -> CGRect {
+        let size = image.size
+        let anchorX = lookRight ? size.width - frame.anchor.x : frame.anchor.x
+        let anchorInWindow = CGPoint(x: anchorX, y: size.height - frame.anchor.y)
+        let origin = CGPoint(x: anchor.x - anchorInWindow.x, y: anchor.y - anchorInWindow.y)
+        return CGRect(origin: origin, size: size)
+    }
+}
+
+private final class MascotController: NSObject {
+    private let world = DesktopWorld()
+    private var timer: Timer?
+    private var nextID = 1
+    private(set) var mascots: [Mascot] = []
+    private var imageSets: [ImageSet] = []
+    var isRunning: Bool {
+        timer != nil
+    }
+    var onStatusChanged: (() -> Void)?
+
+    func loadImageSets(from imageRootURL: URL) {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: imageRootURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            imageSets = []
+            return
+        }
+
+        let names = urls.compactMap { url -> String? in
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+                return nil
+            }
+            return url.lastPathComponent
+        }
+        let preferred = ["Blue", "Orange", "Red", "TDL", "Yellow", "Green", "Purple", "TCO", "victim"]
+        let ordered = preferred.filter { names.contains($0) } + names.filter { !preferred.contains($0) }.sorted()
+        imageSets = ordered.map { ImageSet(name: $0, directoryURL: imageRootURL.appendingPathComponent($0, isDirectory: true)) }
+    }
+
+    func availableImageSetNames() -> [String] {
+        imageSets.map(\.name)
+    }
+
+    func start(selectedNames: [String]) {
+        stop()
+        let selected = Set(selectedNames)
+        let enabledSets = imageSets.filter { selected.contains($0.name) || selected.isEmpty }
+        guard !enabledSets.isEmpty else {
+            onStatusChanged?()
+            return
+        }
+
+        for imageSet in enabledSets {
+            let mascot = Mascot(id: nextID, imageSet: imageSet, anchor: world.randomPointOnFloor(), controller: self)
+            nextID += 1
+            mascots.append(mascot)
+        }
+
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+        RunLoop.main.add(timer!, forMode: .common)
+        onStatusChanged?()
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        mascots.forEach { $0.close() }
+        mascots.removeAll()
+        onStatusChanged?()
+    }
+
+    func restart(selectedNames: [String]) {
+        stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.start(selectedNames: selectedNames)
+        }
+    }
+
+    func hideDisabled(selectedNames: [String]) {
+        guard isRunning else {
+            return
+        }
+        restart(selectedNames: selectedNames)
+    }
+
+    func beginDrag(mascot: Mascot, event: NSEvent) {
+        mascot.beginDrag(at: NSEvent.mouseLocation)
+    }
+
+    func continueDrag(mascot: Mascot, event: NSEvent) {
+        mascot.drag(to: NSEvent.mouseLocation)
+    }
+
+    func endDrag(mascot: Mascot, event: NSEvent) {
+        mascot.endDrag()
+    }
+
+    @objc func holdPointerFromMenu(_ sender: NSMenuItem) {
+        (sender.representedObject as? Mascot)?.holdPointer()
+    }
+
+    @objc func releasePointerFromMenu(_ sender: NSMenuItem) {
+        (sender.representedObject as? Mascot)?.releasePointer()
+    }
+
+    @objc func hideMascotFromMenu(_ sender: NSMenuItem) {
+        guard let mascot = sender.representedObject as? Mascot else {
+            return
+        }
+        mascot.close()
+        mascots.removeAll { $0 === mascot }
+    }
+
+    private func tick() {
+        world.refreshIfNeeded()
+        mascots.forEach { $0.step(in: world) }
+    }
 }
 
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private let controller = MascotController()
     private var statusItem: NSStatusItem?
     private var statusMenu = NSMenu()
-    private var toggleMenuItem = NSMenuItem()
-    private var restartMenuItem = NSMenuItem()
     private var settingsWindow: NSWindow?
     private var statusValueLabel: NSTextField?
-    private var javaPathLabel: NSTextField?
+    private var resourcePathLabel: NSTextField?
     private var startStopButton: NSButton?
     private var autoStartCheckbox: NSButton?
     private var keepAliveCheckbox: NSButton?
     private var imageSetCheckboxes: [String: NSButton] = [:]
-    private var javaProcess: Process?
-    private var logFileHandle: FileHandle?
-    private var windowBoundsTimer: Timer?
-    private var dockSnapshotUntil: Date?
-    private var intentionallyStopped = false
 
-    private var applicationSupportURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("Application Support", isDirectory: true)
-            .appendingPathComponent("AlanBeckersStickfigures", isDirectory: true)
+    private var resourcesURL: URL {
+        Bundle.main.resourceURL!.appendingPathComponent("Stickfigures", isDirectory: true)
     }
 
-    private var windowBoundsURL: URL {
-        applicationSupportURL.appendingPathComponent("window-bounds.tsv")
-    }
-
-    private var runtimeJavaURL: URL {
-        applicationSupportURL.appendingPathComponent("JavaRuntime", isDirectory: true)
-    }
-
-    private var javaResourcesURL: URL {
-        Bundle.main.resourceURL!.appendingPathComponent("Java", isDirectory: true)
-    }
-
-    private var jarURL: URL {
-        javaResourcesURL.appendingPathComponent("AlansStickfigures.jar")
-    }
-
-    private var runtimeJarURL: URL {
-        runtimeJavaURL.appendingPathComponent("AlansStickfigures.jar")
+    private var imageRootURL: URL {
+        resourcesURL.appendingPathComponent("img", isDirectory: true)
     }
 
     private var logURL: URL {
@@ -73,19 +1151,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             .appendingPathComponent("AlanBeckersStickfigures.log")
     }
 
-    private var isRunning: Bool {
-        javaProcess?.isRunning == true
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(.accessory)
         registerDefaultSettings()
+        controller.loadImageSets(from: imageRootURL)
+        controller.onStatusChanged = { [weak self] in
+            self?.updateStatus()
+        }
         configureStatusItem()
-        startWindowBoundsPublisher()
         showSettingsWindow()
+        appendLogLine("Native Swift app launched.")
 
         if UserDefaults.standard.bool(forKey: DefaultsKey.autoStart) {
-            startStickfigures(showErrors: true)
+            controller.start(selectedNames: selectedImageSetNames())
         }
     }
 
@@ -94,10 +1172,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        windowBoundsTimer?.invalidate()
-        windowBoundsTimer = nil
-        writeHiddenWindowBounds()
-        stopStickfigures(force: true)
+        controller.stop()
+        appendLogLine("Native Swift app exited.")
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -111,9 +1187,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         if defaults.object(forKey: DefaultsKey.keepAlive) == nil {
             defaults.set(false, forKey: DefaultsKey.keepAlive)
-        }
-        if defaults.object(forKey: DefaultsKey.enabledImageSets) == nil {
-            defaults.set(availableImageSetNames(), forKey: DefaultsKey.enabledImageSets)
         }
     }
 
@@ -131,23 +1204,22 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let titleItem = NSMenuItem(title: "Alan Beckers Stickfigures", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         statusMenu.addItem(titleItem)
+        statusMenu.addItem(.separator())
 
-        statusMenu.addItem(NSMenuItem.separator())
-
-        toggleMenuItem = NSMenuItem(
-            title: isRunning ? "Turn Off Stickfigures" : "Turn On Stickfigures",
+        let toggleItem = NSMenuItem(
+            title: controller.isRunning ? "Turn Off Stickfigures" : "Turn On Stickfigures",
             action: #selector(toggleStickfigures),
             keyEquivalent: ""
         )
-        toggleMenuItem.target = self
-        statusMenu.addItem(toggleMenuItem)
+        toggleItem.target = self
+        statusMenu.addItem(toggleItem)
 
-        restartMenuItem = NSMenuItem(title: "Restart Stickfigures", action: #selector(restartStickfigures), keyEquivalent: "")
-        restartMenuItem.target = self
-        restartMenuItem.isEnabled = isRunning
-        statusMenu.addItem(restartMenuItem)
+        let restartItem = NSMenuItem(title: "Restart Stickfigures", action: #selector(restartStickfigures), keyEquivalent: "")
+        restartItem.target = self
+        restartItem.isEnabled = controller.isRunning
+        statusMenu.addItem(restartItem)
 
-        statusMenu.addItem(NSMenuItem.separator())
+        statusMenu.addItem(.separator())
 
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettingsWindow), keyEquivalent: ",")
         settingsItem.target = self
@@ -161,7 +1233,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         revealItem.target = self
         statusMenu.addItem(revealItem)
 
-        statusMenu.addItem(NSMenuItem.separator())
+        statusMenu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApplication), keyEquivalent: "q")
         quitItem.target = self
@@ -172,7 +1244,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if settingsWindow == nil {
             settingsWindow = buildSettingsWindow()
         }
-
         updateStatus()
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -180,7 +1251,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func buildSettingsWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -192,15 +1263,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let titleLabel = NSTextField(labelWithString: "Alan Beckers Stickfigures")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 20)
 
-        let subtitleLabel = NSTextField(labelWithString: "Control the desktop stickfigures from the menu bar.")
+        let subtitleLabel = NSTextField(labelWithString: "Native macOS desktop stickfigures.")
         subtitleLabel.textColor = .secondaryLabelColor
 
         statusValueLabel = NSTextField(labelWithString: "")
         statusValueLabel?.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 
-        javaPathLabel = NSTextField(wrappingLabelWithString: "")
-        javaPathLabel?.textColor = .secondaryLabelColor
-        javaPathLabel?.font = NSFont.systemFont(ofSize: 12)
+        resourcePathLabel = NSTextField(wrappingLabelWithString: "")
+        resourcePathLabel?.textColor = .secondaryLabelColor
+        resourcePathLabel?.font = NSFont.systemFont(ofSize: 12)
 
         startStopButton = NSButton(title: "", target: self, action: #selector(toggleStickfigures))
         let restartButton = NSButton(title: "Restart", target: self, action: #selector(restartStickfigures))
@@ -213,7 +1284,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             action: #selector(autoStartChanged)
         )
         keepAliveCheckbox = NSButton(
-            checkboxWithTitle: "Restart stickfigures if they exit unexpectedly",
+            checkboxWithTitle: "Restart stickfigures if they stop",
             target: self,
             action: #selector(keepAliveChanged)
         )
@@ -226,18 +1297,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let enabledLabel = NSTextField(labelWithString: "Enabled stickfigures")
         enabledLabel.font = NSFont.boldSystemFont(ofSize: 13)
 
-        let imageSetGrid = buildImageSetGrid()
-
         let stack = NSStackView(views: [
             titleLabel,
             subtitleLabel,
             statusValueLabel!,
-            javaPathLabel!,
+            resourcePathLabel!,
             buttonRow,
             autoStartCheckbox!,
             keepAliveCheckbox!,
             enabledLabel,
-            imageSetGrid
+            buildImageSetGrid()
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -258,143 +1327,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         return window
     }
 
-    @objc private func toggleStickfigures() {
-        if isRunning {
-            stopStickfigures(force: false)
-        } else {
-            startStickfigures(showErrors: true)
-        }
-    }
-
-    @objc private func restartStickfigures() {
-        stopStickfigures(force: false)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
-            self?.startStickfigures(showErrors: true)
-        }
-    }
-
-    private func startStickfigures(showErrors: Bool) {
-        guard !isRunning else {
-            updateStatus()
-            return
-        }
-
-        guard FileManager.default.fileExists(atPath: jarURL.path) else {
-            if showErrors {
-                presentError("AlansStickfigures.jar was not found in the app bundle.")
-            }
-            updateStatus()
-            return
-        }
-
-        guard let javaPath = resolveJavaPath() else {
-            if showErrors {
-                presentError("Java is required. Install Java, then reopen the app.")
-            }
-            updateStatus()
-            return
-        }
-
-        do {
-            try prepareRuntimeJavaResources()
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: javaPath)
-            process.arguments = [
-                "-Dshimeji.macWindowBoundsFile=\(windowBoundsURL.path)",
-                "-Djava.util.logging.config.file=\(runtimeJavaURL.appendingPathComponent("conf/logging.properties").path)",
-                "-jar",
-                runtimeJarURL.lastPathComponent
-            ]
-            process.currentDirectoryURL = runtimeJavaURL
-
-            let logHandle = try openLogFileHandle()
-            writeLogLine("Starting stickfigures.", to: logHandle)
-            writeLogLine("Java: \(javaPath)", to: logHandle)
-            writeLogLine("Runtime: \(runtimeJavaURL.path)", to: logHandle)
-            writeLogLine("Enabled sets: \(selectedImageSetNames().joined(separator: "/"))", to: logHandle)
-            process.standardOutput = logHandle
-            process.standardError = logHandle
-            logFileHandle = logHandle
-
-            intentionallyStopped = false
-            process.terminationHandler = { [weak self] terminatedProcess in
-                DispatchQueue.main.async {
-                    self?.handleStickfiguresExit(terminatedProcess)
-                }
-            }
-
-            try process.run()
-            javaProcess = process
-        } catch {
-            appendLogLine("Failed to start stickfigures: \(error.localizedDescription)")
-            if showErrors {
-                presentError("Could not start the stickfigures: \(error.localizedDescription)")
-            }
-            try? logFileHandle?.close()
-            logFileHandle = nil
-        }
-
-        updateStatus()
-    }
-
-    private func availableImageSetNames() -> [String] {
-        let imageSetsURL = javaResourcesURL.appendingPathComponent("img", isDirectory: true)
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: imageSetsURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-
-        let directoryNames = urls.compactMap { url -> String? in
-            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey]),
-                  values.isDirectory == true else {
-                return nil
-            }
-            return url.lastPathComponent
-        }
-
-        let preferredOrder = ["Blue", "Orange", "Red", "TDL", "Yellow", "Green", "Purple", "TCO", "victim"]
-        let knownNames = preferredOrder.filter { directoryNames.contains($0) }
-        let extraNames = directoryNames
-            .filter { !preferredOrder.contains($0) }
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-
-        return knownNames + extraNames
-    }
-
-    private func selectedImageSetNames() -> [String] {
-        let availableNames = availableImageSetNames()
-        guard !availableNames.isEmpty else {
-            return []
-        }
-
-        let availableSet = Set(availableNames)
-        let storedNames = UserDefaults.standard.stringArray(forKey: DefaultsKey.enabledImageSets) ?? availableNames
-        let selectedNames = storedNames.filter { availableSet.contains($0) }
-        return selectedNames.isEmpty ? availableNames : selectedNames
-    }
-
-    private func setSelectedImageSetNames(_ names: [String]) {
-        let availableNames = availableImageSetNames()
-        let availableSet = Set(availableNames)
-        let selectedNames = names.filter { availableSet.contains($0) }
-        let safeSelection = selectedNames.isEmpty ? Array(availableNames.prefix(1)) : selectedNames
-        UserDefaults.standard.set(safeSelection, forKey: DefaultsKey.enabledImageSets)
-    }
-
     private func buildImageSetGrid() -> NSStackView {
         imageSetCheckboxes.removeAll()
-
         let container = NSStackView()
         container.orientation = .vertical
         container.alignment = .leading
         container.spacing = 8
 
         let names = availableImageSetNames()
-        guard !names.isEmpty else {
+        if names.isEmpty {
             let emptyLabel = NSTextField(labelWithString: "No bundled stickfigures found.")
             emptyLabel.textColor = .secondaryLabelColor
             container.addArrangedSubview(emptyLabel)
@@ -402,450 +1343,77 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
 
         let selectedNames = Set(selectedImageSetNames())
-        var currentRow: NSStackView?
-
+        var row: NSStackView?
         for (index, name) in names.enumerated() {
             if index % 3 == 0 {
-                let row = NSStackView()
-                row.orientation = .horizontal
-                row.alignment = .centerY
-                row.spacing = 16
-                container.addArrangedSubview(row)
-                currentRow = row
+                let nextRow = NSStackView()
+                nextRow.orientation = .horizontal
+                nextRow.alignment = .centerY
+                nextRow.spacing = 16
+                container.addArrangedSubview(nextRow)
+                row = nextRow
             }
 
             let checkbox = NSButton(checkboxWithTitle: name, target: self, action: #selector(imageSetChanged(_:)))
             checkbox.state = selectedNames.contains(name) ? .on : .off
             checkbox.widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
-            currentRow?.addArrangedSubview(checkbox)
+            row?.addArrangedSubview(checkbox)
             imageSetCheckboxes[name] = checkbox
         }
 
         return container
     }
 
+    private func availableImageSetNames() -> [String] {
+        controller.availableImageSetNames()
+    }
+
+    private func selectedImageSetNames() -> [String] {
+        let available = availableImageSetNames()
+        guard !available.isEmpty else {
+            return []
+        }
+
+        let availableSet = Set(available)
+        let stored = UserDefaults.standard.stringArray(forKey: DefaultsKey.enabledImageSets) ?? available
+        let selected = stored.filter { availableSet.contains($0) }
+        return selected.isEmpty ? available : selected
+    }
+
+    private func setSelectedImageSetNames(_ names: [String]) {
+        let available = availableImageSetNames()
+        let availableSet = Set(available)
+        let selected = names.filter { availableSet.contains($0) }
+        UserDefaults.standard.set(selected.isEmpty ? Array(available.prefix(1)) : selected, forKey: DefaultsKey.enabledImageSets)
+    }
+
+    @objc private func toggleStickfigures() {
+        if controller.isRunning {
+            controller.stop()
+        } else {
+            controller.start(selectedNames: selectedImageSetNames())
+        }
+    }
+
+    @objc private func restartStickfigures() {
+        controller.restart(selectedNames: selectedImageSetNames())
+    }
+
     @objc private func imageSetChanged(_ sender: NSButton) {
-        let selectedNames = imageSetCheckboxes
+        let selected = imageSetCheckboxes
             .filter { $0.value.state == .on }
             .map { $0.key }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
-        if selectedNames.isEmpty {
+        if selected.isEmpty {
             sender.state = .on
             setSelectedImageSetNames([sender.title])
         } else {
-            setSelectedImageSetNames(selectedNames)
+            setSelectedImageSetNames(selected)
         }
 
+        controller.hideDisabled(selectedNames: selectedImageSetNames())
         updateStatus()
-        if isRunning {
-            restartStickfigures()
-        }
-    }
-
-    private func prepareRuntimeJavaResources() throws {
-        try ensureApplicationSupportDirectory()
-
-        let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: runtimeJavaURL.path) {
-            try fileManager.removeItem(at: runtimeJavaURL)
-        }
-
-        try fileManager.copyItem(at: javaResourcesURL, to: runtimeJavaURL)
-        try updateRuntimeSettings()
-    }
-
-    private func updateRuntimeSettings() throws {
-        let settingsURL = runtimeJavaURL
-            .appendingPathComponent("conf", isDirectory: true)
-            .appendingPathComponent("settings.properties")
-        let activeShimeji = selectedImageSetNames().joined(separator: "/")
-        var settingsContent = (try? String(contentsOf: settingsURL, encoding: .utf8)) ?? ""
-
-        settingsContent = replacingSettingsProperty(
-            in: settingsContent,
-            key: "AlwaysShowShimejiChooser",
-            value: "false"
-        )
-        settingsContent = replacingSettingsProperty(
-            in: settingsContent,
-            key: "ActiveShimeji",
-            value: activeShimeji
-        )
-
-        try settingsContent.write(to: settingsURL, atomically: true, encoding: .utf8)
-    }
-
-    private func replacingSettingsProperty(in content: String, key: String, value: String) -> String {
-        let replacement = "\(key)=\(value)"
-        var replaced = false
-        var lines = content.components(separatedBy: .newlines)
-        if lines.last == "" {
-            lines.removeLast()
-        }
-
-        for index in lines.indices {
-            if isSettingsPropertyLine(lines[index], key: key) {
-                lines[index] = replacement
-                replaced = true
-                break
-            }
-        }
-
-        if !replaced {
-            lines.append(replacement)
-        }
-
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    private func isSettingsPropertyLine(_ line: String, key: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard trimmed.hasPrefix(key) else {
-            return false
-        }
-
-        let remainder = String(trimmed.dropFirst(key.count))
-        return remainder.hasPrefix("=") || remainder.hasPrefix(":") || remainder.hasPrefix(" ") || remainder.hasPrefix("\t")
-    }
-
-    private func ensureApplicationSupportDirectory() throws {
-        try FileManager.default.createDirectory(at: applicationSupportURL, withIntermediateDirectories: true)
-    }
-
-    private func startWindowBoundsPublisher() {
-        windowBoundsTimer?.invalidate()
-        try? ensureApplicationSupportDirectory()
-        publishWindowBounds()
-
-        windowBoundsTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.publishWindowBounds()
-        }
-    }
-
-    private func publishWindowBounds() {
-        guard let snapshot = findInteractiveWindow() else {
-            writeHiddenWindowBounds()
-            return
-        }
-
-        let bounds = snapshot.bounds.integral
-        guard bounds.width > 0, bounds.height > 0 else {
-            writeHiddenWindowBounds()
-            return
-        }
-
-        let line = [
-            "1",
-            String(Int(bounds.origin.x)),
-            String(Int(bounds.origin.y)),
-            String(Int(bounds.width)),
-            String(Int(bounds.height)),
-            sanitizeWindowTitle(snapshot.title)
-        ].joined(separator: "\t") + "\n"
-
-        try? ensureApplicationSupportDirectory()
-        try? line.write(to: windowBoundsURL, atomically: true, encoding: .utf8)
-    }
-
-    private func writeHiddenWindowBounds() {
-        try? ensureApplicationSupportDirectory()
-        try? "0\t0\t0\t0\t0\t\n".write(to: windowBoundsURL, atomically: true, encoding: .utf8)
-    }
-
-    private func findInteractiveWindow() -> WindowSnapshot? {
-        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-        guard let windowInfo = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
-            return nil
-        }
-
-        let candidates = windowInfo.compactMap { windowSnapshot(from: $0) }
-        guard !candidates.isEmpty else {
-            return syntheticDockSnapshot()
-        }
-
-        let dockSnapshot = syntheticDockSnapshot()
-        let mouseLocation = CGEvent(source: nil)?.location
-        if let mouseLocation = mouseLocation,
-           let windowUnderMouse = candidates.first(where: { $0.bounds.contains(mouseLocation) }) {
-            return windowUnderMouse
-        }
-
-        if let dockSnapshot = dockSnapshot,
-           let mouseLocation = mouseLocation,
-           dockSnapshot.bounds.contains(mouseLocation) {
-            dockSnapshotUntil = Date().addingTimeInterval(6.0)
-            return dockSnapshot
-        }
-
-        if let dockSnapshot = dockSnapshot,
-           let until = dockSnapshotUntil,
-           until > Date() {
-            return dockSnapshot
-        }
-
-        if let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
-           let frontmostWindow = candidates.first(where: { $0.ownerPID == frontmostPID }) {
-            return frontmostWindow
-        }
-
-        return candidates.first
-    }
-
-    private func syntheticDockSnapshot() -> WindowSnapshot? {
-        guard !dockAutohideEnabled() else {
-            return nil
-        }
-
-        let screenDock = visibleDockScreenAndEdge()
-        guard let screen = screenDock.screen,
-              let edge = screenDock.edge,
-              screenDock.inset > 0 else {
-            return nil
-        }
-
-        let frame = screen.frame
-        let inset = screenDock.inset
-        let dockLength = estimatedDockLength(maxLength: edge == .bottom ? frame.width : frame.height)
-        let bounds: CGRect
-
-        switch edge {
-        case .bottom:
-            bounds = CGRect(
-                x: frame.midX - dockLength / 2.0,
-                y: frame.maxY - inset,
-                width: dockLength,
-                height: inset
-            )
-        case .left:
-            bounds = CGRect(
-                x: frame.minX,
-                y: frame.maxY - ((frame.height + dockLength) / 2.0),
-                width: inset,
-                height: dockLength
-            )
-        case .right:
-            bounds = CGRect(
-                x: frame.maxX - inset,
-                y: frame.maxY - ((frame.height + dockLength) / 2.0),
-                width: inset,
-                height: dockLength
-            )
-        }
-
-        return WindowSnapshot(ownerPID: 0, bounds: bounds.integral, title: "Dock")
-    }
-
-    private func visibleDockScreenAndEdge() -> (screen: NSScreen?, edge: DockEdge?, inset: CGFloat) {
-        let preferredEdge = dockPreferredEdge()
-        var bestScreen: NSScreen?
-        var bestEdge: DockEdge?
-        var bestInset: CGFloat = 0
-
-        for screen in NSScreen.screens {
-            let frame = screen.frame
-            let visibleFrame = screen.visibleFrame
-            let insets: [(DockEdge, CGFloat)] = [
-                (.bottom, max(0, visibleFrame.minY - frame.minY)),
-                (.left, max(0, visibleFrame.minX - frame.minX)),
-                (.right, max(0, frame.maxX - visibleFrame.maxX))
-            ]
-
-            for (edge, inset) in insets where inset >= 12 {
-                let preferredBonus: CGFloat = edge == preferredEdge ? 1000 : 0
-                if inset + preferredBonus > bestInset + (bestEdge == preferredEdge ? 1000 : 0) {
-                    bestScreen = screen
-                    bestEdge = edge
-                    bestInset = inset
-                }
-            }
-        }
-
-        return (bestScreen, bestEdge, bestInset)
-    }
-
-    private func dockPreferredEdge() -> DockEdge {
-        switch dockDefaults()?.string(forKey: "orientation") {
-        case "left":
-            return .left
-        case "right":
-            return .right
-        default:
-            return .bottom
-        }
-    }
-
-    private func estimatedDockLength(maxLength: CGFloat) -> CGFloat {
-        let defaults = dockDefaults()
-        let tileSize = max(24, CGFloat(defaults?.integer(forKey: "tilesize") ?? 48))
-        let persistentApps = defaults?.array(forKey: "persistent-apps")?.count ?? 0
-        let persistentOthers = defaults?.array(forKey: "persistent-others")?.count ?? 0
-        let recentApps = dockShowsRecentApps() ? 3 : 0
-        let iconCount = max(6, persistentApps + persistentOthers + recentApps + 2)
-        let estimatedLength = CGFloat(iconCount) * (tileSize + 8) + 72
-
-        return min(maxLength, max(300, estimatedLength))
-    }
-
-    private func dockAutohideEnabled() -> Bool {
-        guard let value = dockDefaults()?.object(forKey: "autohide") else {
-            return false
-        }
-
-        return boolValue(value)
-    }
-
-    private func dockShowsRecentApps() -> Bool {
-        guard let value = dockDefaults()?.object(forKey: "show-recents") else {
-            return true
-        }
-
-        return boolValue(value)
-    }
-
-    private func dockDefaults() -> UserDefaults? {
-        UserDefaults(suiteName: "com.apple.dock")
-    }
-
-    private func boolValue(_ value: Any) -> Bool {
-        if let bool = value as? Bool {
-            return bool
-        }
-        if let number = value as? NSNumber {
-            return number.boolValue
-        }
-        if let string = value as? String {
-            return ["1", "true", "yes"].contains(string.lowercased())
-        }
-
-        return false
-    }
-
-    private func windowSnapshot(from info: [String: Any]) -> WindowSnapshot? {
-        guard let layerNumber = info[kCGWindowLayer as String] as? NSNumber,
-              layerNumber.intValue == 0,
-              let ownerPIDNumber = info[kCGWindowOwnerPID as String] as? NSNumber,
-              let boundsDictionary = info[kCGWindowBounds as String] as? NSDictionary,
-              let bounds = CGRect(dictionaryRepresentation: boundsDictionary) else {
-            return nil
-        }
-
-        let ownerPID = pid_t(ownerPIDNumber.int32Value)
-        if ownerPID == getpid() {
-            return nil
-        }
-
-        if let javaPID = javaProcess?.processIdentifier, ownerPID == javaPID {
-            return nil
-        }
-
-        let ownerName = info[kCGWindowOwnerName as String] as? String ?? ""
-        if shouldIgnoreWindowOwner(ownerName) {
-            return nil
-        }
-
-        let alpha = (info[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1.0
-        guard alpha > 0.01,
-              bounds.width >= 120,
-              bounds.height >= 80,
-              bounds.origin.x.isFinite,
-              bounds.origin.y.isFinite,
-              bounds.width.isFinite,
-              bounds.height.isFinite else {
-            return nil
-        }
-
-        let windowName = info[kCGWindowName as String] as? String ?? ""
-        let title = windowName.isEmpty ? ownerName : "\(ownerName): \(windowName)"
-        return WindowSnapshot(ownerPID: ownerPID, bounds: bounds, title: title)
-    }
-
-    private func shouldIgnoreWindowOwner(_ ownerName: String) -> Bool {
-        if ownerName.localizedCaseInsensitiveContains("Alan Beckers Stickfigures") {
-            return true
-        }
-
-        let ignoredOwners: Set<String> = [
-            "Control Center",
-            "Dock",
-            "Notification Center",
-            "SystemUIServer",
-            "Window Server"
-        ]
-        return ignoredOwners.contains(ownerName)
-    }
-
-    private func sanitizeWindowTitle(_ title: String) -> String {
-        let cleaned = title
-            .replacingOccurrences(of: "\t", with: " ")
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return String(cleaned.prefix(256))
-    }
-
-    private func stopStickfigures(force: Bool) {
-        intentionallyStopped = true
-        guard let process = javaProcess else {
-            updateStatus()
-            return
-        }
-
-        if process.isRunning {
-            appendLogLine(force ? "Stopping stickfigures immediately." : "Stopping stickfigures.")
-            process.terminate()
-            let processID = process.processIdentifier
-
-            if force {
-                Thread.sleep(forTimeInterval: 0.5)
-                if process.isRunning {
-                    kill(processID, SIGKILL)
-                }
-            } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    if process.isRunning {
-                        kill(processID, SIGKILL)
-                    }
-                }
-            }
-        }
-
-        updateStatus()
-    }
-
-    private func handleStickfiguresExit(_ process: Process) {
-        if javaProcess === process {
-            javaProcess = nil
-        }
-
-        if let logFileHandle {
-            writeLogLine("Stickfigures exited with status \(process.terminationStatus).", to: logFileHandle)
-        }
-        try? logFileHandle?.close()
-        logFileHandle = nil
-        updateStatus()
-
-        if UserDefaults.standard.bool(forKey: DefaultsKey.keepAlive), !intentionallyStopped {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.startStickfigures(showErrors: false)
-            }
-        }
-    }
-
-    private func updateStatus() {
-        let statusText = isRunning ? "Status: on" : "Status: off"
-        statusValueLabel?.stringValue = statusText
-        javaPathLabel?.stringValue = "Java app: \(runtimeJavaURL.path)"
-        startStopButton?.title = isRunning ? "Turn Off" : "Turn On"
-        autoStartCheckbox?.state = UserDefaults.standard.bool(forKey: DefaultsKey.autoStart) ? .on : .off
-        keepAliveCheckbox?.state = UserDefaults.standard.bool(forKey: DefaultsKey.keepAlive) ? .on : .off
-        let selectedNames = Set(selectedImageSetNames())
-        for (name, checkbox) in imageSetCheckboxes {
-            checkbox.state = selectedNames.contains(name) ? .on : .off
-        }
-        statusItem?.button?.title = isRunning ? "ABS On" : "ABS"
-        updateStatusMenu()
     }
 
     @objc private func autoStartChanged(_ sender: NSButton) {
@@ -856,99 +1424,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         UserDefaults.standard.set(sender.state == .on, forKey: DefaultsKey.keepAlive)
     }
 
-    private func resolveJavaPath() -> String? {
-        if let javaHome = captureOutput("/usr/libexec/java_home", arguments: []), !javaHome.isEmpty {
-            let javaPath = "\(javaHome)/bin/java"
-            if isUsableJava(at: javaPath) {
-                return javaPath
-            }
+    private func updateStatus() {
+        statusValueLabel?.stringValue = controller.isRunning ? "Status: on" : "Status: off"
+        resourcePathLabel?.stringValue = "Assets: \(resourcesURL.path)"
+        startStopButton?.title = controller.isRunning ? "Turn Off" : "Turn On"
+        autoStartCheckbox?.state = UserDefaults.standard.bool(forKey: DefaultsKey.autoStart) ? .on : .off
+        keepAliveCheckbox?.state = UserDefaults.standard.bool(forKey: DefaultsKey.keepAlive) ? .on : .off
+        let selectedNames = Set(selectedImageSetNames())
+        for (name, checkbox) in imageSetCheckboxes {
+            checkbox.state = selectedNames.contains(name) ? .on : .off
         }
-
-        let candidates = ["/usr/bin/java", "/opt/homebrew/bin/java", "/usr/local/bin/java"]
-        return candidates.first { isUsableJava(at: $0) }
-    }
-
-    private func isUsableJava(at path: String) -> Bool {
-        guard FileManager.default.isExecutableFile(atPath: path) else {
-            return false
-        }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = ["-version"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
-
-    private func captureOutput(_ executable: String, arguments: [String]) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else {
-                return nil
-            }
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            return String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            return nil
-        }
-    }
-
-    private func openLogFileHandle() throws -> FileHandle {
-        let logsDirectory = logURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
-
-        if !FileManager.default.fileExists(atPath: logURL.path) {
-            FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        }
-
-        let handle = try FileHandle(forWritingTo: logURL)
-        try handle.seekToEnd()
-        return handle
-    }
-
-    private func writeLogLine(_ message: String, to handle: FileHandle) {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
-            return
-        }
-
-        handle.write(data)
-        try? handle.synchronize()
-    }
-
-    private func appendLogLine(_ message: String) {
-        guard let handle = try? openLogFileHandle() else {
-            return
-        }
-
-        writeLogLine(message, to: handle)
-        try? handle.close()
-    }
-
-    private func ensureLogHasVisibleContent() {
-        let size = (try? logURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        if size == 0 {
-            appendLogLine("Log opened. Status: \(isRunning ? "on" : "off"). Java output and wrapper events appear here.")
-        }
+        statusItem?.button?.title = controller.isRunning ? "ABS On" : "ABS"
+        updateStatusMenu()
     }
 
     @objc private func openLog() {
@@ -961,25 +1448,50 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     @objc private func quitApplication() {
-        stopStickfigures(force: true)
+        controller.stop()
         NSApp.terminate(nil)
     }
 
-    private func presentError(_ message: String) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Alan Beckers Stickfigures"
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.runModal()
+    private func ensureLogHasVisibleContent() {
+        let size = (try? logURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if size == 0 {
+            appendLogLine("Log opened. Native Swift events appear here.")
+        }
+    }
+
+    private func appendLogLine(_ message: String) {
+        let directory = logURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: logURL.path) {
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        }
+
+        guard let handle = try? FileHandle(forWritingTo: logURL) else {
+            return
+        }
+
+        do {
+            try handle.seekToEnd()
+        } catch {
+            return
+        }
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        if let data = "[\(timestamp)] \(message)\n".data(using: .utf8) {
+            handle.write(data)
+            try? handle.synchronize()
+        }
+        try? handle.close()
     }
 }
 
+private var retainedDelegate: AppDelegate?
+
 @main
-private struct LauncherApp {
+private struct NativeApp {
     static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
+        retainedDelegate = delegate
         app.delegate = delegate
         app.run()
     }

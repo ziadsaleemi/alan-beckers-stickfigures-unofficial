@@ -17,9 +17,11 @@ This is a customised stand-alone app of Kilkakon's Shimeji-ees dedicated towards
 
 ## Installation Guide
 
-### Java Installation
+### Runtime Requirements
 
-This app requires Java to be installed. You can download Java from the following link: [Java Download](https://www.java.com/en/download/)
+macOS release builds are native Swift/AppKit apps and do not require Java.
+
+Windows builds use the original Java stickfigure runtime packaged into the installer. Local Windows development still needs JDK 17+ when building the `.exe`.
 
 ### Download Link
 
@@ -37,26 +39,28 @@ Download the installer from the latest release: [**alan-beckers-stickfigures-ins
 
 #### macOS
 
-1. Install Java if it is not already available. You can check by running `java -version` in Terminal.
-2. Download the macOS DMG from the latest GitHub release.
-3. Open the DMG and drag `Alan Beckers Stickfigures.app` to Applications.
-4. Open the app. It shows a settings/status window and adds an `ABS` item to the macOS menu bar.
-5. Use the menu bar item to turn the stickfigures on or off, restart them, open logs, or quit the wrapper.
-6. In Settings, check only the stickfigure colors you want enabled. Disabled stickfigures are hidden the next time the Java app starts.
-7. Public release builds are signed and notarized so macOS can verify them. Local development builds are ad-hoc signed and may require Control-click, **Open**, then confirm.
+1. Download the macOS DMG from the latest GitHub release.
+2. Open the DMG and drag `Alan Beckers Stickfigures.app` to Applications.
+3. Open the app. It shows a settings/status window and adds an `ABS` item to the macOS menu bar.
+4. Use the menu bar item to turn the stickfigures on or off, restart them, open logs, or quit the app.
+5. In Settings, check only the stickfigure colors you want enabled. Disabled stickfigures are hidden immediately when the native engine restarts.
+6. Public release builds are signed and notarized so macOS can verify them. Local development builds are ad-hoc signed and may require Control-click, **Open**, then confirm.
 
 macOS launcher output is written to `~/Library/Logs/AlanBeckersStickfigures.log`.
 
 ### Shared Desktop Features
 
-- Windows and macOS both ship the same patched Java stickfigure runtime, image sets, behavior files, and bundled Java compatibility libraries.
-- Right-click a stickfigure and choose **Hold Pointer** to make only that stickfigure hold onto the mouse pointer until you choose another behavior.
-- Disabled stickfigure sets are controlled by `ActiveShimeji` in `conf/settings.properties`. Windows uses the installed Java app's config directly; macOS writes the setting into its runtime copy under `~/Library/Application Support/AlanBeckersStickfigures/JavaRuntime`.
-- Windows keeps the original Shimeji-ee native window support for interactive desktop windows. macOS adds a native wrapper that publishes normal desktop window bounds so the existing Shimeji behaviors can land, sit, crawl, and walk along those windows.
+- Windows and macOS both ship the same stickfigure image sets, behavior files, and artwork.
+- Right-click a stickfigure and choose **Hold Pointer** to make only that stickfigure hold onto the mouse pointer until you release it.
+- On Windows, enabled stickfigure sets are controlled by `ActiveShimeji` in `conf/settings.properties`.
+- On macOS, enabled stickfigure sets are controlled from the native settings window and stored in macOS user defaults.
+- Windows keeps the original Shimeji-ee Java runtime and native window support. macOS now uses a native Swift/AppKit sprite engine for smoother transparent overlay windows.
 
 ### macOS Desktop Notes
 
-When launched through the macOS app, the macOS environment treats all connected displays as one continuous desktop, keeps the menu bar as a real top edge, and avoids using the Dock's invisible reserved strip as a raised floor. When you drag near the visible Dock, the launcher briefly exposes an estimated Dock surface so the stickfigures can react to the visible Dock area instead of empty space. The launcher tracks window bounds passively; throwing or moving other apps' windows is still disabled on macOS because that requires Accessibility permission.
+The macOS app treats all connected displays as one continuous desktop, keeps the menu bar as a real top edge, and keeps stickfigures above normal app windows and the visible Dock. The native engine passively reads normal window bounds so stickfigures can land, sit, fall, and walk on top of windows. It estimates the visible Dock surface and ignores the Dock's invisible reserved strip so figures do not hover on empty space.
+
+The previous Java-backed macOS implementation is preserved on the `codex/java-macos-backup-before-swift-rewrite` branch for reference.
 
 ### macOS Development Build
 
@@ -72,7 +76,7 @@ Build the distributable DMG:
 ./script/package_macos.sh
 ```
 
-The DMG is written to `dist/Alan-Beckers-Stickfigures-macOS.dmg`. The app is ad-hoc signed for local validation, but not notarized.
+The DMG is written to `dist/Alan-Beckers-Stickfigures-macOS.dmg`. The local app is ad-hoc signed for validation, but not notarized unless the notarization environment variables below are provided.
 The local `dist/` directory is ignored by Git.
 
 For a public macOS release that opens normally on other Macs, build with a Developer ID Application certificate and notarization credentials:

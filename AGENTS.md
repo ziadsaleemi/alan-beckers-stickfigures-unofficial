@@ -54,24 +54,21 @@ Use the smallest relevant skill set; do not load every skill by default.
 
 ## Curated Project Notes
 
-- This is a packaged Java/Swing Shimeji-ee desktop app. The primary runnable artifact is `AlansStickfigures.jar`; most original app code is committed as `.class` files under `Shimeji-ee/`.
-- macOS support is patched into the JAR with `com.group_finity.mascot.mac.NativeFactoryImpl`, which bridges the app's macOS factory lookup to a macOS environment plus dedicated per-pixel transparent sprite windows.
-- macOS window awareness is split between Swift and Java: the native wrapper publishes the topmost usable window bounds to `~/Library/Application Support/AlanBeckersStickfigures/window-bounds.tsv`, passes that path as `-Dshimeji.macWindowBoundsFile`, and `com.group_finity.mascot.mac.MacEnvironment` maps it into the legacy `activeIE` behavior API.
-- `com.group_finity.mascot.mac.MacEnvironment` exposes one continuous multi-display `workArea` with the menu-bar top inset only; do not use macOS Dock insets as the floor because they include invisible reserved space.
-- The macOS wrapper estimates the visible Dock rectangle from Dock settings and briefly publishes it as the active window surface when the cursor is over the Dock, so drag/drop near the Dock can react to the visible Dock without raising the whole screen floor.
+- This repo now ships separate desktop implementations from shared artwork/config assets: Windows packages the patched Java/Swing Shimeji-ee runtime, while macOS packages a native Swift/AppKit menu-bar app.
+- The previous Java-backed macOS implementation is preserved on branch `codex/java-macos-backup-before-swift-rewrite` for reference and rollback.
+- The native macOS source lives in `macos/AlanBeckersStickfiguresLauncher/main.swift`; it builds a transparent AppKit overlay engine with one `NSPanel` per stickfigure, an `ABS` menu-bar controller, a settings/status window, enabled-stickfigure checkboxes, Hold Pointer, multi-display movement, normal-window platforms, and visible-Dock handling.
+- macOS sprite windows use `.screenSaver` level, transparent layer-backed `NSView` rendering, and pixel-sized `NSBitmapImageRep` loading so PNG DPI metadata cannot shrink individual characters. Keep sprite top/floor clamping based on rendered sprite rectangles, not only the logical anchor point.
+- macOS treats all connected displays as one continuous desktop. Use the visible Dock only as a platform surface; do not use macOS Dock invisible reserved insets as the global floor.
 - `src/com/group_finity/mascot/Mascot$7.java` replaces the original right-click "Follow Cursor" menu action with a single-mascot "Hold Pointer" action by setting the selected mascot to the existing hidden `Dragged` behavior.
-- `src/com/group_finity/mascot/mac/MacTranslucentWindow.java` and `src/com/group_finity/mascot/mac/MacNativeImage.java` are the macOS sprite rendering path. Keep macOS on this modern per-pixel transparent window path; the legacy generic JNA transparent-window mask can retain old action silhouettes on modern macOS.
 - `src/com/group_finity/mascot/generic/GenericTranslucentWindow.java` replaces the generic transparent window to clear the native mask and alpha buffer before each repaint, avoiding stale sprite shadows behind changing actions on generic rendering.
 - `src/com/group_finity/mascot/win/WindowsTranslucentWindow.java` replaces the Windows layered window to synchronously refresh per-pixel alpha with `UpdateLayeredWindow`, avoiding stale sprite shadows in the Windows package.
-- Shared Java runtime changes, including Hold Pointer, transparent-window repaint fixes, `ActiveShimeji`, and bundled Nashorn compatibility libraries, apply to both Windows and macOS packages because both package `AlansStickfigures.jar`, `conf`, `img`, and `lib`.
+- Java runtime changes, including Hold Pointer, transparent-window repaint fixes, `ActiveShimeji`, and bundled Nashorn compatibility libraries, apply to the Windows package and the direct-JAR fallback launchers.
 - Modern Java support is patched with bundled `lib/nashorn-core-15.7.jar` and ASM dependencies plus compatibility classes under `src/jdk/nashorn/api/scripting/`.
-- Use direct `java -jar AlansStickfigures.jar` only for basic Java startup checks. Use `./script/build_and_run.sh --verify` for macOS wrapper, menu-bar, and window-awareness changes.
-- The native macOS wrapper source lives in `macos/AlanBeckersStickfiguresLauncher/main.swift`; it builds a regular AppKit app with a menu-bar `ABS` controller, settings/status window, Java child-process start/stop controls, and enabled-stickfigure checkboxes.
-- The macOS wrapper copies bundled Java resources to `~/Library/Application Support/AlanBeckersStickfigures/JavaRuntime`, writes the selected `ActiveShimeji` list into that runtime `conf/settings.properties`, and launches Java from that writable copy.
-- Use `./script/build_and_run.sh --verify` to build and launch the generated app in `dist/`, then verify both the native wrapper and Java child stay running.
+- Use direct `java -jar AlansStickfigures.jar` only for basic Java/Windows runtime startup checks. Use `./script/build_and_run.sh --verify` for native macOS engine, menu-bar, settings, window-awareness, Dock, and sprite-rendering changes.
+- `script/build_macos_app.sh` compiles the Swift app, copies `conf` and `img` into `Contents/Resources/Stickfigures`, writes `LSUIElement=true`, and signs the generated app. It no longer embeds the Java runtime for macOS.
 - Use `./script/package_macos.sh` to build `dist/Alan-Beckers-Stickfigures-macOS.dmg`.
 - Local macOS packages are ad-hoc signed by default. Public GitHub release DMGs require `MACOS_CODESIGN_IDENTITY` with a Developer ID Application identity plus Team API-key notarization credentials; do not tag a public macOS release until those GitHub secrets are configured.
 - The release workflow imports `MACOS_CERTIFICATE_P12`, signs with hardened runtime, notarizes the DMG, staples the ticket, and validates with `spctl`. Missing signing/notarization secrets should fail the macOS release job rather than publish an untrusted DMG.
 - Use `./script/package_windows.ps1` on Windows with JDK 17+ and WiX Toolset to build `dist/Alan-Beckers-Stickfigures-Windows.exe`.
 - `.github/workflows/release.yml` builds macOS DMG, Windows EXE, and a source ZIP, then creates or updates a GitHub Release for tag pushes or manual workflow dispatch.
-- `RunMac.command` is a root-level direct-JAR fallback launcher; the menu-bar/settings experience comes from the generated macOS app bundle.
+- `RunMac.command` is a root-level direct-JAR fallback launcher; the native menu-bar/settings experience comes from the generated macOS app bundle.
