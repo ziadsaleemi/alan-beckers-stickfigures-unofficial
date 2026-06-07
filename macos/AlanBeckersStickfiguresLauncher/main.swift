@@ -180,6 +180,7 @@ private final class ImageSet {
     let directoryURL: URL
     let clips: [String: ActionClip]
     private var imageCache: [String: NSImage] = [:]
+    private var stillClipCache: [String: ActionClip] = [:]
 
     init(name: String, directoryURL: URL) {
         self.name = name
@@ -201,6 +202,34 @@ private final class ImageSet {
         }
 
         return clips.values.first
+    }
+
+    func stillClip(
+        named actionName: String,
+        preferredImages: [String],
+        fallback fallbackNames: [String] = []
+    ) -> ActionClip? {
+        let cacheKey = ([actionName] + preferredImages + fallbackNames).joined(separator: "|")
+        if let clip = stillClipCache[cacheKey] {
+            return clip
+        }
+
+        let sourceClip = clip(named: actionName, fallback: fallbackNames)
+        guard let sourceClip,
+              let frame = preferredImages.compactMap({ preferredImage in
+                  sourceClip.frames.first { $0.imageName == preferredImage }
+              }).first ?? sourceClip.frames.first else {
+            return nil
+        }
+
+        let clip = ActionClip(name: "\(actionName)-Still", frames: [PoseFrame(
+            imageName: frame.imageName,
+            anchor: frame.anchor,
+            velocity: .zero,
+            duration: 250
+        )])
+        stillClipCache[cacheKey] = clip
+        return clip
     }
 
     func image(named imageName: String) -> NSImage? {
@@ -1014,7 +1043,11 @@ private final class Mascot {
         case .land:
             return imageSet.clip(named: "StandFromFloor", fallback: ["Bouncing", "Stand"])
         case .dragged, .holdPointer:
-            return imageSet.clip(named: "Pinched", fallback: ["Resisting", "Falling", "Stand"])
+            return imageSet.stillClip(
+                named: "Pinched",
+                preferredImages: ["pinch04.png", "pinch03.png", "pinch05.png"],
+                fallback: ["Resisting", "Falling", "Stand"]
+            )
         case .climbWall:
             return imageSet.clip(named: "ClimbWall", fallback: ["GrabWall"])
         case .climbCeiling:
