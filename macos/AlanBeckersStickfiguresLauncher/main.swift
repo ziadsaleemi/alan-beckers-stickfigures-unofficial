@@ -153,8 +153,10 @@ private enum MascotAction: String {
 
     var contactDistance: CGFloat {
         switch self {
-        case .hugPartner, .tugOfWar, .highFive, .comfortPartner:
-            return 36
+        case .hugPartner:
+            return 22
+        case .tugOfWar, .highFive, .comfortPartner:
+            return 34
         case .argument, .tease, .victimTrap, .ambush:
             return 58
         case .buildTogether, .teamPose, .copyPartner, .celebrate:
@@ -1521,7 +1523,7 @@ private final class Mascot {
         forceApproach: Bool = false
     ) {
         let shouldApproach = (forceApproach || interaction.needsContactStaging)
-            && abs(partner.anchor.x - anchor.x) > interaction.contactDistance + 28
+            && abs(partner.anchor.x - anchor.x) > interaction.contactDistance + 6
         queuedStoryAction = shouldApproach ? interaction : nil
         storyContactDistance = interaction.contactDistance
         choose(shouldApproach ? .storyApproach : interaction, targetX: targetX)
@@ -1890,7 +1892,7 @@ private final class Mascot {
             }
         }
 
-        if distance <= storyContactDistance + 10 || actionTick > 210 {
+        if distance <= storyContactDistance + 2 || actionTick > 210 {
             self.queuedStoryAction = nil
             choose(queuedStoryAction, targetX: targetX)
             storyPartner = partner
@@ -2129,13 +2131,11 @@ private final class Mascot {
 
         _ = settleOnGround(in: world)
         faceStoryPartnerIfNeeded()
+        tightenCloseContactSpacingIfNeeded()
 
         if action == .tugOfWar {
             let directionAway: CGFloat = anchor.x >= partner.anchor.x ? 1 : -1
             anchor.x += sin(CGFloat(actionTick) / 3.0) * 0.7 * directionAway
-        } else if action == .argument {
-            let directionAway: CGFloat = anchor.x >= partner.anchor.x ? 1 : -1
-            anchor.x += sin(CGFloat(actionTick) / 5.0) * 0.5 * directionAway
         }
 
         if actionTick > max(storyEndTick, currentClipDuration(defaultDuration: 110)) {
@@ -2150,12 +2150,39 @@ private final class Mascot {
         }
     }
 
+    private func tightenCloseContactSpacingIfNeeded() {
+        guard actionTick <= 2,
+              storyRole == 0,
+              action.needsContactStaging,
+              let partner = storyPartner else {
+            return
+        }
+
+        let distance = abs(partner.anchor.x - anchor.x)
+        guard distance > storyContactDistance + 2 else {
+            return
+        }
+
+        let side: CGFloat = anchor.x <= partner.anchor.x ? -1 : 1
+        anchor.x = partner.anchor.x + side * storyContactDistance
+    }
+
     private func faceStoryPartnerIfNeeded() {
         guard let partner = storyPartner else {
             return
         }
 
         lookRight = partner.anchor.x > anchor.x
+    }
+
+    private func isGuardRepositioning() -> Bool {
+        guard let partner = storyPartner, action == .guardPartner else {
+            return false
+        }
+
+        let side: CGFloat = storyRole == 0 ? -1 : 1
+        let desiredX = partner.anchor.x + side * 88
+        return abs(desiredX - anchor.x) > 12
     }
 
     private func fallbackReactionAction() -> MascotAction {
@@ -2421,6 +2448,9 @@ private final class Mascot {
         case .copyPartner:
             return imageSet.clip(named: "Dance", fallback: ["SitAndLookAtMouse", "SitAndLookUp", "Stand"])
         case .guardPartner:
+            if isGuardRepositioning() {
+                return imageSet.clip(named: "Walk", fallback: ["Run", "Stand"])
+            }
             return imageSet.clip(named: "Stand", fallback: ["SitAndLookAtMouse", "Walk"])
         case .ambush:
             return imageSet.clip(named: "Dash", fallback: ["Run", "Stabbing", "CursorHate", "Stand"])
