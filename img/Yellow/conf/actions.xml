@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <Mascot xmlns="http://www.group-finity.com/Mascot" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://www.group-finity.com/Mascot Mascot.xsd">
 
@@ -410,6 +410,126 @@
 			</Animation>
 		</Action>
 
+		<!-- BEGIN ABS_ROLEPLAY_SPRITES -->
+		<Action Name="RoleFollow" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_follow01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_follow02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleCopy" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_copy01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_copy02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleGuard" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_guard01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_guard02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleAmbush" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_ambush01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_ambush02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleHugGive" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_hug_give01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_hug_give02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleHugReceive" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_hug_receive01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_hug_receive02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleTugPull" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_tug_pull01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tug_pull02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleTugPulled" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_tug_pulled01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_tug_pulled02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleHighFive" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_highfive01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_highfive02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleArgument" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_argument01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_argument02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleComfortGive" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_comfort_give01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_comfort_give02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleComfortReceive" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_comfort_receive01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_comfort_receive02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleTeamPose" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_team_pose01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_team_pose02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleBuildTogether" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_build_together01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_build_together02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleVictimTrap" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_victim_trap01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_victim_trap02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RoleTrapReaction" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_trap_reaction01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_trap_reaction02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+
+		<Action Name="RolePatrol" Type="Animate" BorderType="Floor">
+			<Animation>
+				<Pose Image="/role_patrol01.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+				<Pose Image="/role_patrol02.png" ImageAnchor="64,128" Velocity="0,0" Duration="8" />
+			</Animation>
+		</Action>
+		<!-- END ABS_ROLEPLAY_SPRITES -->
 	</ActionList>
 
 	<!-- Actual Behavior -->

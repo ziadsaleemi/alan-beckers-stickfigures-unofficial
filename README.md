@@ -86,8 +86,10 @@ such as follow-the-leader, copycat poses, guarding/watching, ambush/prank beats,
 hugs, tug-of-war, high-fives, arguments, comfort/rescue moments, team poses,
 trading places, building/inspecting together, victim trap/lasso beats, paired
 patrols, playful chases, short sparring/fighting beats, teasing, observing, and
-shared celebrations. Close-contact scenes first move the characters together,
-then play the paired action so the result reads as an interaction instead of two
+shared celebrations. These actions have generated role-play sprite frames under
+each `img/<Stickfigure>/` directory and generated `Role...` clips in each
+`actions.xml`. Close-contact scenes first move the characters together, then
+play the paired action so the result reads as an interaction instead of two
 unrelated idle choices.
 
 These interactions are built from the shipped sprites and are biased by story

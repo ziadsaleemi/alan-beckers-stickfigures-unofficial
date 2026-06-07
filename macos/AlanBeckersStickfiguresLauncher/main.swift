@@ -835,59 +835,71 @@ private final class ImageSet {
         case .stabbing:
             return hasClip(named: "Stabbing")
         case .followPartner:
-            return hasClip(named: "Run") || hasClip(named: "Walk")
+            return hasClip(named: "RoleFollow") || hasClip(named: "Run") || hasClip(named: "Walk")
         case .copyPartner:
-            return hasClip(named: "Dance")
+            return hasClip(named: "RoleCopy")
+                || hasClip(named: "Dance")
                 || hasClip(named: "SitAndLookAtMouse")
                 || hasClip(named: "SitAndLookUp")
                 || hasClip(named: "Stand")
         case .guardPartner:
-            return hasClip(named: "Stand")
+            return hasClip(named: "RoleGuard")
+                || hasClip(named: "Stand")
                 || hasClip(named: "SitAndLookAtMouse")
                 || hasClip(named: "Run")
                 || hasClip(named: "Walk")
         case .ambush:
-            return hasClip(named: "Dash")
+            return hasClip(named: "RoleAmbush")
+                || hasClip(named: "Dash")
                 || hasClip(named: "Run")
                 || hasClip(named: "Stabbing")
                 || hasClip(named: "CursorHate")
         case .hugPartner:
-            return hasClip(named: "HuggingSolidAction")
+            return hasClip(named: "RoleHugGive")
+                || hasClip(named: "RoleHugReceive")
+                || hasClip(named: "HuggingSolidAction")
                 || hasClip(named: "HuggedSolidAction")
                 || hasClip(named: "Stand")
         case .tugOfWar:
-            return hasClip(named: "HuggingSolidAction")
+            return hasClip(named: "RoleTugPull")
+                || hasClip(named: "RoleTugPulled")
+                || hasClip(named: "HuggingSolidAction")
                 || hasClip(named: "HuggedSolidAction")
                 || hasClip(named: "Run")
                 || hasClip(named: "Sprawl")
         case .highFive:
-            return hasClip(named: "Dance") || hasClip(named: "Stand")
+            return hasClip(named: "RoleHighFive") || hasClip(named: "Dance") || hasClip(named: "Stand")
         case .argument:
-            return hasClip(named: "CursorSpite")
+            return hasClip(named: "RoleArgument")
+                || hasClip(named: "CursorSpite")
                 || hasClip(named: "CursorHate")
                 || hasClip(named: "Stabbing")
                 || hasClip(named: "Stand")
         case .comfortPartner:
-            return hasClip(named: "HuggingSolidAction")
+            return hasClip(named: "RoleComfortGive")
+                || hasClip(named: "RoleComfortReceive")
+                || hasClip(named: "HuggingSolidAction")
                 || hasClip(named: "SitAndLookAtMouse")
                 || hasClip(named: "Sprawl")
                 || hasClip(named: "Stand")
         case .teamPose:
-            return hasClip(named: "Stand") || hasClip(named: "Dance")
+            return hasClip(named: "RoleTeamPose") || hasClip(named: "Stand") || hasClip(named: "Dance")
         case .tradePlaces:
             return hasClip(named: "Run") || hasClip(named: "Walk")
         case .buildTogether:
-            return hasClip(named: "SitAndLookAtMouse")
+            return hasClip(named: "RoleBuildTogether")
+                || hasClip(named: "SitAndLookAtMouse")
                 || hasClip(named: "SitAndLookUp")
                 || hasClip(named: "CursorHate")
                 || hasClip(named: "Stand")
         case .victimTrap:
             return name.lowercased() == "victim"
-                && (hasClip(named: "LassoSpin")
+                && (hasClip(named: "RoleVictimTrap")
+                    || hasClip(named: "LassoSpin")
                     || hasClip(named: "Stabbing")
                     || hasClip(named: "CursorHate"))
         case .patrolPair:
-            return hasClip(named: "Walk") || hasClip(named: "Run")
+            return hasClip(named: "RolePatrol") || hasClip(named: "Walk") || hasClip(named: "Run")
         case .playChase:
             return hasClip(named: "Run") || hasClip(named: "Walk")
         case .spar:
@@ -2444,48 +2456,48 @@ private final class Mascot {
         case .stabbing:
             return imageSet.clip(named: "Stabbing", fallback: ["CursorHate", "Stand"])
         case .followPartner:
-            return imageSet.clip(named: "Run", fallback: ["Walk", "Dash", "Stand"])
+            return imageSet.clip(named: "RoleFollow", fallback: ["Run", "Walk", "Dash", "Stand"])
         case .copyPartner:
-            return imageSet.clip(named: "Dance", fallback: ["SitAndLookAtMouse", "SitAndLookUp", "Stand"])
+            return imageSet.clip(named: "RoleCopy", fallback: ["Dance", "SitAndLookAtMouse", "SitAndLookUp", "Stand"])
         case .guardPartner:
             if isGuardRepositioning() {
                 return imageSet.clip(named: "Walk", fallback: ["Run", "Stand"])
             }
-            return imageSet.clip(named: "Stand", fallback: ["SitAndLookAtMouse", "Walk"])
+            return imageSet.clip(named: "RoleGuard", fallback: ["Stand", "SitAndLookAtMouse", "Walk"])
         case .ambush:
-            return imageSet.clip(named: "Dash", fallback: ["Run", "Stabbing", "CursorHate", "Stand"])
+            return imageSet.clip(named: "RoleAmbush", fallback: ["Dash", "Run", "Stabbing", "CursorHate", "Stand"])
         case .hugPartner:
             if storyRole == 1 {
-                return imageSet.clip(named: "HuggedSolidAction", fallback: ["HuggingSolidAction", "SitAndLookAtMouse", "Stand"])
+                return imageSet.clip(named: "RoleHugReceive", fallback: ["HuggedSolidAction", "HuggingSolidAction", "SitAndLookAtMouse", "Stand"])
             }
-            return imageSet.clip(named: "HuggingSolidAction", fallback: ["HuggedSolidAction", "SitAndLookAtMouse", "Stand"])
+            return imageSet.clip(named: "RoleHugGive", fallback: ["HuggingSolidAction", "HuggedSolidAction", "SitAndLookAtMouse", "Stand"])
         case .tugOfWar:
             if storyRole == 1 {
-                return imageSet.clip(named: "HuggedSolidAction", fallback: ["Sprawl", "Run", "Stand"])
+                return imageSet.clip(named: "RoleTugPulled", fallback: ["HuggedSolidAction", "Sprawl", "Run", "Stand"])
             }
-            return imageSet.clip(named: "HuggingSolidAction", fallback: ["Run", "Sprawl", "Stand"])
+            return imageSet.clip(named: "RoleTugPull", fallback: ["HuggingSolidAction", "Run", "Sprawl", "Stand"])
         case .highFive:
-            return imageSet.clip(named: "Dance", fallback: ["Stand"])
+            return imageSet.clip(named: "RoleHighFive", fallback: ["Dance", "Stand"])
         case .argument:
-            return imageSet.clip(named: "CursorSpite", fallback: ["CursorHate", "Stabbing", "Stand"])
+            return imageSet.clip(named: "RoleArgument", fallback: ["CursorSpite", "CursorHate", "Stabbing", "Stand"])
         case .comfortPartner:
             if storyRole == 1 {
-                return imageSet.clip(named: "Sprawl", fallback: ["SitAndLookAtMouse", "Sit", "Stand"])
+                return imageSet.clip(named: "RoleComfortReceive", fallback: ["Sprawl", "SitAndLookAtMouse", "Sit", "Stand"])
             }
-            return imageSet.clip(named: "HuggingSolidAction", fallback: ["SitAndLookAtMouse", "SitAndLookUp", "Stand"])
+            return imageSet.clip(named: "RoleComfortGive", fallback: ["HuggingSolidAction", "SitAndLookAtMouse", "SitAndLookUp", "Stand"])
         case .teamPose:
-            return imageSet.clip(named: "Stand", fallback: ["Dance", "SitAndLookAtMouse"])
+            return imageSet.clip(named: "RoleTeamPose", fallback: ["Stand", "Dance", "SitAndLookAtMouse"])
         case .tradePlaces:
             return imageSet.clip(named: "Run", fallback: ["Walk", "Dash", "Stand"])
         case .buildTogether:
-            return imageSet.clip(named: "SitAndLookAtMouse", fallback: ["SitAndLookUp", "CursorHate", "Sit", "Stand"])
+            return imageSet.clip(named: "RoleBuildTogether", fallback: ["SitAndLookAtMouse", "SitAndLookUp", "CursorHate", "Sit", "Stand"])
         case .victimTrap:
             if imageSet.name.lowercased() == "victim" {
-                return imageSet.clip(named: "LassoSpin", fallback: ["Stabbing", "CursorHate", "Dash", "Stand"])
+                return imageSet.clip(named: "RoleVictimTrap", fallback: ["LassoSpin", "Stabbing", "CursorHate", "Dash", "Stand"])
             }
-            return imageSet.clip(named: "Sprawl", fallback: ["Tripping", "SitAndLookAtMouse", "Stand"])
+            return imageSet.clip(named: "RoleTrapReaction", fallback: ["Sprawl", "Tripping", "SitAndLookAtMouse", "Stand"])
         case .patrolPair:
-            return imageSet.clip(named: "Walk", fallback: ["Run", "Stand"])
+            return imageSet.clip(named: "RolePatrol", fallback: ["Walk", "Run", "Stand"])
         case .playChase:
             return imageSet.clip(named: "Run", fallback: ["Walk", "Dash", "Stand"])
         case .spar:
