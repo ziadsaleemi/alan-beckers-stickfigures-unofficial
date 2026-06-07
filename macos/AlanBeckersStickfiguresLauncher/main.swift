@@ -232,6 +232,29 @@ private final class ImageSet {
         return clip
     }
 
+    func pointerHoldClip() -> ActionClip? {
+        switch name.lowercased() {
+        case "tco", "tdl":
+            return stillClip(
+                named: "GrabCeiling",
+                preferredImages: ["hang01.png"],
+                fallback: ["Pinched", "Falling", "Stand"]
+            )
+        case "victim":
+            return stillClip(
+                named: "Pinched",
+                preferredImages: ["pinch01.png"],
+                fallback: ["Stand"]
+            )
+        default:
+            return stillClip(
+                named: "Pinched",
+                preferredImages: ["pinch04.png", "pinch03.png", "pinch05.png"],
+                fallback: ["Resisting", "Falling", "Stand"]
+            )
+        }
+    }
+
     func image(named imageName: String) -> NSImage? {
         if let image = imageCache[imageName] {
             return image
@@ -1043,11 +1066,7 @@ private final class Mascot {
         case .land:
             return imageSet.clip(named: "StandFromFloor", fallback: ["Bouncing", "Stand"])
         case .dragged, .holdPointer:
-            return imageSet.stillClip(
-                named: "Pinched",
-                preferredImages: ["pinch04.png", "pinch03.png", "pinch05.png"],
-                fallback: ["Resisting", "Falling", "Stand"]
-            )
+            return imageSet.pointerHoldClip()
         case .climbWall:
             return imageSet.clip(named: "ClimbWall", fallback: ["GrabWall"])
         case .climbCeiling:
